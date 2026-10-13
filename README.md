@@ -20,7 +20,9 @@ cp .env.example .env            # then set SESSION_SECRET and database URLs
 createdb teeco_dev && createdb teeco_test
 npm run db:migrate              # apply migrations to DATABASE_URL
 npm run dev                     # http://localhost:3000
-npm test                        # runs against TEST_DATABASE_URL (schema is recreated)
+npm test                        # unit/integration tests against TEST_DATABASE_URL (schema is recreated)
+npm run create-platform-admin -- 08031234567 "Your Name"   # first Teeco admin
+npx next build && npm run test:e2e  # browser tests against E2E_DATABASE_URL (npx playwright install chromium once)
 ```
 
 Schema changes: edit `src/db/schema.ts`, run `npm run db:generate`, commit the SQL in `drizzle/`.
