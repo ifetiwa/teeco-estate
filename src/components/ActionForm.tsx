@@ -51,10 +51,13 @@ export function Field ({ label, name, hint, children }: { label: string, name: s
     )
 }
 
+// Written out in full so Tailwind generates each class
+const VARIANT_CLASS = { primary: 'btn-primary', secondary: 'btn-secondary', danger: 'btn-danger' } as const
+
 export function SubmitButton ({ children, variant = 'primary', className = '' }: { children: ReactNode, variant?: 'primary' | 'secondary' | 'danger', className?: string }) {
     const { pending } = useFormStatus()
     return (
-        <button type='submit' disabled={pending} className={`btn-${variant} ${className}`}>
+        <button type='submit' disabled={pending} className={`${VARIANT_CLASS[variant]} ${className}`}>
             {pending ? 'Please wait…' : children}
         </button>
     )

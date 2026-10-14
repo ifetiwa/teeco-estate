@@ -66,3 +66,18 @@ Two independent layers:
 A platform admin must record a reason (at least 10 characters) to open an estate. The grant lasts 2 hours, is read-only,
 shows a banner, and every page view is written to `audit_logs`. The estate admin sees all grants under Settings.
 `audit_logs` also records estate creation, staff role changes, resident approval/rejection and move-outs.
+
+## Visitors (Build 4)
+
+- `visitor_passes`: created by a current resident for their unit. 6-digit `code` (unique among active passes in the
+  estate), single- or multi-use, validity window entered in Lagos time. The QR encodes `TEECO-PASS:<passId>:<code>`.
+- `visits`: one arrival at the gate (from a pass or a walk-in) with status
+  `awaiting_resident → approved/declined`, `checked_in → checked_out`, or `denied`. This table is the visitor log.
+- Gate checks (`verifyGateCode`): wrong format, not found, wrong estate, cancelled, used, expired, not yet valid,
+  blocked visitor, curfew; each with a plain-language message. Check-in re-validates under a row lock so a single-use
+  pass admits exactly once even with two guards.
+- Rate limiting: every lookup is stored in `gate_code_attempts`; 5 failures in 10 minutes lock that guard device
+  (identified by an HttpOnly cookie).
+- Estate rules live in `estates.settings.visitors` (max passes per resident per day, curfew) plus `blocked_visitors`.
+- Residents get in-app `notifications` for arrivals and departures; walk-in requests also go by SMS (sent after commit).
+- Visitor log export is CSV with formula-injection protection and is audit-logged.

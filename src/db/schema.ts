@@ -177,3 +177,98 @@ export const auditLogs = pgTable('audit_logs', {
     details: jsonb('details').notNull().default({}),
     createdAt: createdAt(),
 }, (t) => [index('audit_logs_estate_created_idx').on(t.estateId, t.createdAt)])
+
+// ---------- Visitors (Build 4) ----------
+
+export const passUsage = pgEnum('pass_usage', ['single', 'multi'])
+export const passStatus = pgEnum('pass_status', ['active', 'used', 'cancelled', 'expired'])
+
+/** A resident's pre-approval for a visitor. `code` is the 6-digit gate code; unique among active passes in an estate. */
+export const visitorPasses = pgTable('visitor_passes', {
+    id: id(),
+    estateId: estateId(),
+    unitId: uuid('unit_id').notNull().references(() => units.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    visitorName: text('visitor_name').notNull(),
+    visitorPhone: text('visitor_phone'),
+    purpose: text('purpose').notNull().default(''),
+    vehiclePlate: text('vehicle_plate'),
+    code: text('code').notNull(),
+    usage: passUsage('usage').notNull().default('single'),
+    usesCount: integer('uses_count').notNull().default(0),
+    validFrom: timestamp('valid_from', { withTimezone: true }).notNull(),
+    validUntil: timestamp('valid_until', { withTimezone: true }).notNull(),
+    status: passStatus('status').notNull().default('active'),
+    createdAt: createdAt(),
+}, (t) => [
+    uniqueIndex('visitor_passes_active_code').on(t.estateId, t.code).where(sql`${t.status} = 'active'`),
+    index('visitor_passes_unit_idx').on(t.unitId, t.createdAt),
+    index('visitor_passes_creator_day_idx').on(t.createdBy, t.createdAt),
+])
+
+export const visitKind = pgEnum('visit_kind', ['pass', 'walk_in'])
+export const visitStatus = pgEnum('visit_status', ['awaiting_resident', 'approved', 'declined', 'denied', 'checked_in', 'checked_out', 'cancelled'])
+
+/** One visitor arrival at the gate, from a pass or as a walk-in. */
+export const visits = pgTable('visits', {
+    id: id(),
+    estateId: estateId(),
+    unitId: uuid('unit_id').notNull().references(() => units.id, { onDelete: 'cascade' }),
+    passId: uuid('pass_id').references(() => visitorPasses.id, { onDelete: 'set null' }),
+    kind: visitKind('kind').notNull(),
+    status: visitStatus('status').notNull(),
+    visitorName: text('visitor_name').notNull(),
+    visitorPhone: text('visitor_phone'),
+    vehiclePlate: text('vehicle_plate'),
+    purpose: text('purpose').notNull().default(''),
+    gate: integer('gate').notNull().default(1),
+    note: text('note'), // reason for denial/decline
+    loggedBy: uuid('logged_by').references(() => users.id, { onDelete: 'set null' }), // guard
+    decidedBy: uuid('decided_by').references(() => users.id, { onDelete: 'set null' }), // resident for walk-ins
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
+    checkedInBy: uuid('checked_in_by').references(() => users.id, { onDelete: 'set null' }),
+    checkedOutAt: timestamp('checked_out_at', { withTimezone: true }),
+    checkedOutBy: uuid('checked_out_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+}, (t) => [
+    index('visits_estate_created_idx').on(t.estateId, t.createdAt),
+    index('visits_estate_status_idx').on(t.estateId, t.status),
+    index('visits_unit_idx').on(t.unitId, t.createdAt),
+])
+
+/** Visitors an estate has barred, matched by phone and/or name. */
+export const blockedVisitors = pgTable('blocked_visitors', {
+    id: id(),
+    estateId: estateId(),
+    name: text('name'),
+    phone: text('phone'),
+    reason: text('reason').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: createdAt(),
+})
+
+/** Every gate code lookup, for per-device rate limiting and abuse review. */
+export const gateCodeAttempts = pgTable('gate_code_attempts', {
+    id: id(),
+    estateId: estateId(),
+    deviceId: text('device_id').notNull(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    success: boolean('success').notNull(),
+    createdAt: createdAt(),
+}, (t) => [index('gate_code_attempts_device_idx').on(t.estateId, t.deviceId, t.createdAt)])
+
+// ---------- In-app notifications (extended with push/SMS channels in Build 8) ----------
+
+export const notifications = pgTable('notifications', {
+    id: id(),
+    estateId: estateId(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(), // visitor.arrived, visitor.left, visitor.walk_in_request, ...
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    link: text('link'),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: createdAt(),
+}, (t) => [index('notifications_user_created_idx').on(t.userId, t.createdAt)])

@@ -1,11 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 
 import { actorFromUser } from '@/lib/access'
-import { type ActionState, formObject, runAction } from '@/lib/actions'
+import { type ActionState, formObject, runAction, toActionError } from '@/lib/actions'
 import { requireUser } from '@/lib/auth/current'
 import { addHelper, addVehicle, getMyHome, removeHelper, removeVehicle } from '@/lib/residents'
+import { cancelPass, createPass, decideWalkIn } from '@/lib/visitors'
 
 async function forMyHome (occupancyId: string, fn: (ctx: { actor: ReturnType<typeof actorFromUser>, estateId: string, unitId: string }) => Promise<string>) {
     const user = await requireUser()
@@ -43,5 +45,35 @@ export async function removeMyHelperAction (occupancyId: string, helperId: strin
     return forMyHome(occupancyId, async ({ actor, estateId }) => {
         await removeHelper(actor, estateId, helperId)
         return 'Removed.'
+    })
+}
+
+export async function createPassAction (occupancyId: string, _: ActionState, formData: FormData): Promise<ActionState> {
+    const user = await requireUser()
+    let passId: string
+    try {
+        const actor = actorFromUser(user)
+        const home = await getMyHome(actor, occupancyId)
+        const pass = await createPass(actor, home.occupancy.estateId, { ...formObject(formData), unitId: home.unit.id } as never)
+        passId = pass.id
+    } catch (e) {
+        return toActionError(e)
+    }
+    redirect(`/home/${occupancyId}/passes/${passId}`)
+}
+
+export async function cancelPassAction (occupancyId: string, passId: string, _: ActionState) {
+    return forMyHome(occupancyId, async ({ actor, estateId }) => {
+        await cancelPass(actor, estateId, passId)
+        revalidatePath(`/home/${occupancyId}/passes`)
+        return 'Pass cancelled.'
+    })
+}
+
+export async function decideWalkInAction (occupancyId: string, visitId: string, approve: boolean, _: ActionState) {
+    return forMyHome(occupancyId, async ({ actor, estateId }) => {
+        await decideWalkIn(actor, estateId, visitId, approve)
+        revalidatePath('/app')
+        return approve ? 'Approved. The guard will let them in.' : 'Declined. The guard has been told.'
     })
 }

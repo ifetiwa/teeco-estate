@@ -11,6 +11,7 @@ import {
 } from '@/lib/residents'
 import { addStaff, removeStaff } from '@/lib/staff'
 import { saveEstateLogo } from '@/lib/storage'
+import { blockVisitor, unblockVisitor, updateVisitorRules } from '@/lib/visitors'
 import { addUnits, createZone, setUnitActive } from '@/lib/structure'
 
 async function withActor (estateId: string, fn: (actor: Actor) => Promise<string | void>): Promise<ActionState> {
@@ -142,5 +143,26 @@ export async function removeStaffAction (estateId: string, membershipId: string,
     return withActor(estateId, async (actor) => {
         await removeStaff(actor, estateId, membershipId)
         return 'Role removed.'
+    })
+}
+
+export async function updateVisitorRulesAction (estateId: string, _: ActionState, formData: FormData) {
+    return withActor(estateId, async (actor) => {
+        await updateVisitorRules(actor, estateId, formObject(formData) as never)
+        return 'Visitor rules saved.'
+    })
+}
+
+export async function blockVisitorAction (estateId: string, _: ActionState, formData: FormData) {
+    return withActor(estateId, async (actor) => {
+        await blockVisitor(actor, estateId, formObject(formData) as never)
+        return 'Visitor blocked.'
+    })
+}
+
+export async function unblockVisitorAction (estateId: string, blockId: string, _: ActionState) {
+    return withActor(estateId, async (actor) => {
+        await unblockVisitor(actor, estateId, blockId)
+        return 'Block removed.'
     })
 }

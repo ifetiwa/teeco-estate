@@ -31,6 +31,8 @@ test('Build 3: guard is limited to the gate area; platform support access is rea
     // Guard: no Residents/Staff/Settings, and direct URLs are 404
     await signIn(page, GUARD)
     await page.getByRole('link', { name: /Guarded Gardens/ }).click()
+    await page.waitForURL(/\/gate\//) // guards land on the gate screen
+    await page.goto(estateUrl)
     await expect(page.getByRole('link', { name: 'Streets & units' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Residents' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Staff' })).toHaveCount(0)

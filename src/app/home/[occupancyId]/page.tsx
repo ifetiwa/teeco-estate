@@ -39,6 +39,8 @@ export default async function MyHomePage ({ params }: { params: Promise<{ occupa
                     <p className='text-slate-600'>{home.estateName}</p>
                 </div>
 
+                <Link href={`/home/${occupancyId}/passes`} className='btn-primary w-full py-3 text-lg'>Visitor passes</Link>
+
                 <section className='card'>
                     <h2 className='font-semibold'>Household</h2>
                     <ul className='mt-2 space-y-1 text-sm'>
