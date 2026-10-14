@@ -10,3 +10,5 @@ next-env.d.ts
 .env.*
 !.env.example
 uploads/
+
+.vercel/
