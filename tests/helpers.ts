@@ -1,17 +1,40 @@
-import { sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { Pool } from 'pg'
+import { afterAll } from 'vitest'
 
-import { getDb } from '@/db'
+import { getDb, withDbContext } from '@/db'
+import * as schema from '@/db/schema'
 import { users } from '@/db/schema'
-import { type Actor } from '@/lib/access'
+import { type Actor, getEstateAccess } from '@/lib/access'
 import { createEstate } from '@/lib/estates'
 import { ConsoleSmsProvider, setSmsProvider } from '@/lib/sms'
 import { addUnits, createZone } from '@/lib/structure'
 
+let ownerPool: Pool | undefined
+
+/** Owner connection (bypasses row-level security): for test setup and inspecting rows only, never for code under test. */
+export function ownerDb () {
+    if (!ownerPool) {
+        ownerPool = new Pool({ connectionString: process.env.TEST_DATABASE_OWNER_URL, max: 2 })
+        afterAll(async () => {
+            await ownerPool?.end()
+            ownerPool = undefined
+        })
+    }
+    return drizzle(ownerPool, { schema })
+}
+
 /** Empties every application table (keeps the schema). */
 export async function resetDb (): Promise<void> {
-    const db = getDb()
+    const db = ownerDb()
     const { rows } = await db.execute<{ tablename: string }>(sql`select tablename from pg_tables where schemaname = 'public'`)
     if (rows.length) await db.execute(sql.raw(`truncate ${rows.map(r => `"${r.tablename}"`).join(', ')} cascade`))
+}
+
+/** The actor's access to an estate, resolved under row-level security like the app does. */
+export function accessOf (actor: Actor, estateId: string) {
+    return withDbContext({ estateId, userId: actor.userId }, tx => getEstateAccess(tx, actor, estateId))
 }
 
 export function useConsoleSms (): ConsoleSmsProvider {
@@ -42,7 +65,7 @@ export async function createTestEstate (opts: { name?: string, houses?: string }
     const platform = await createUser({ name: 'Teeco Ops', isPlatformAdmin: true })
     const adminPhone = nextPhone()
     const estate = await createEstate(platform, { name: opts.name ?? 'Sunshine Estate', district: 'Lokogoma', gateCount: 2, adminName: 'Chairman Bello', adminPhone })
-    const [admin] = await getDb().select().from(users).where(sql`${users.phone} = ${adminPhone}`)
+    const [admin] = await getDb().select().from(users).where(eq(users.phone, adminPhone))
     const adminActor = actorFor(admin.id)
     const zone = await createZone(adminActor, estate.id, { name: '1st Avenue', kind: 'avenue' })
     const { created } = await addUnits(adminActor, estate.id, { zoneId: zone.id, labels: opts.houses ?? '1-5' })

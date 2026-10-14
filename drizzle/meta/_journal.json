@@ -8,6 +8,20 @@
       "when": 1791929815485,
       "tag": "0000_estate_model",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791930821971,
+      "tag": "0001_support_and_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791930823869,
+      "tag": "0002_row_level_security",
+      "breakpoints": true
     }
   ]
 }

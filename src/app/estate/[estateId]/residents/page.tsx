@@ -17,8 +17,8 @@ const RELATION: Record<string, string> = { owner: 'Owner', tenant: 'Tenant', hou
 export default async function ResidentsPage ({ params, searchParams }: { params: Promise<{ estateId: string }>, searchParams: Promise<{ q?: string, past?: string }> }) {
     const { estateId } = await params
     const { q, past } = await searchParams
-    const { actor, estate, isAdmin, access } = await loadStaffEstate(estateId)
-    if (!isAdmin && !access.staffRoles.includes('finance_officer')) notFound()
+    const { actor, estate, isAdmin, can } = await loadStaffEstate(estateId)
+    if (!can('residents.read')) notFound()
     const [residents, pending] = await Promise.all([
         listResidents(actor, estate.id, { search: q, includePast: past === '1' }),
         isAdmin ? listPendingResidents(actor, estate.id) : Promise.resolve([]),

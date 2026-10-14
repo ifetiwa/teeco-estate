@@ -9,7 +9,7 @@ import { requireUser } from '@/lib/auth/current'
 import { listAllEstates } from '@/lib/estates'
 import { formatDate } from '@/lib/format'
 
-import { createEstateAction } from './actions'
+import { createEstateAction, openSupportAccessAction } from './actions'
 
 export const metadata: Metadata = { title: 'Platform' }
 
@@ -21,13 +21,13 @@ export default async function PlatformPage () {
     return (
         <>
             <AppHeader user={user} />
-            <main className='mx-auto grid max-w-5xl gap-8 px-4 py-6 lg:grid-cols-[1fr_380px]'>
+            <main className='mx-auto grid max-w-5xl grid-cols-1 gap-8 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_380px]'>
                 <section>
                     <h1 className='text-2xl font-semibold'>Estates</h1>
                     <div className='mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white'>
                         <table className='w-full text-left text-sm'>
                             <thead className='bg-slate-50 text-slate-600'>
-                                <tr><th className='p-3'>Estate</th><th className='p-3'>District</th><th className='p-3'>Units</th><th className='p-3'>Status</th><th className='p-3'>Created</th></tr>
+                                <tr><th className='p-3'>Estate</th><th className='p-3'>District</th><th className='p-3'>Units</th><th className='p-3'>Residents</th><th className='p-3'>Status</th><th className='p-3'>Created</th><th className='p-3'>Support access</th></tr>
                             </thead>
                             <tbody>
                                 {estates.map(e => (
@@ -35,15 +35,22 @@ export default async function PlatformPage () {
                                         <td className='p-3 font-medium'>{e.name}</td>
                                         <td className='p-3'>{e.district}</td>
                                         <td className='p-3'>{e.unitCount}</td>
+                                        <td className='p-3'>{e.residentCount}</td>
                                         <td className='p-3 capitalize'>{e.status}</td>
                                         <td className='p-3'>{formatDate(e.createdAt)}</td>
+                                        <td className='p-3'>
+                                            <ActionForm action={openSupportAccessAction.bind(null, e.id)} className='flex gap-2'>
+                                                <input name='reason' required minLength={10} placeholder='Reason (logged)' aria-label={`Reason for support access to ${e.name}`} className='w-40 py-1 text-sm' />
+                                                <SubmitButton variant='secondary' className='px-2 py-1 text-sm'>Open</SubmitButton>
+                                            </ActionForm>
+                                        </td>
                                     </tr>
                                 ))}
-                                {estates.length === 0 && <tr><td colSpan={5} className='p-3 text-slate-500'>No estates yet.</td></tr>}
+                                {estates.length === 0 && <tr><td colSpan={7} className='p-3 text-slate-500'>No estates yet.</td></tr>}
                             </tbody>
                         </table>
                     </div>
-                    <p className='mt-2 text-xs text-slate-500'>Resident data is private to each estate. Platform admins see counts only.</p>
+                    <p className='mt-2 text-xs text-slate-500'>Resident data is private to each estate. Platform admins see counts only; opening an estate needs a reason, lasts 2 hours, is read-only and is logged for the estate admin.</p>
                 </section>
                 <section className='card h-fit'>
                     <h2 className='text-lg font-semibold'>New estate</h2>

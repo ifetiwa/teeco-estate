@@ -153,3 +153,27 @@ export const unitHelpers = pgTable('unit_helpers', {
     isActive: boolean('is_active').notNull().default(true),
     createdAt: createdAt(),
 })
+
+// ---------- Support access and audit ----------
+
+/** Time-limited, reasoned, read-only access by a platform admin to one estate's data. */
+export const supportAccessGrants = pgTable('support_access_grants', {
+    id: id(),
+    estateId: estateId(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    reason: text('reason').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: createdAt(),
+}, (t) => [index('support_access_grants_lookup_idx').on(t.estateId, t.userId, t.expiresAt)])
+
+export const auditLogs = pgTable('audit_logs', {
+    id: id(),
+    estateId: uuid('estate_id').references(() => estates.id, { onDelete: 'set null' }),
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    action: text('action').notNull(), // e.g. support.granted, support.viewed, staff.role_added
+    entityType: text('entity_type'),
+    entityId: uuid('entity_id'),
+    details: jsonb('details').notNull().default({}),
+    createdAt: createdAt(),
+}, (t) => [index('audit_logs_estate_created_idx').on(t.estateId, t.createdAt)])

@@ -3,6 +3,9 @@ import { notFound } from 'next/navigation'
 
 import { ActionForm, Field, SubmitButton } from '@/components/ActionForm'
 import { PhoneInput } from '@/components/PhoneInput'
+import { formatDateTime } from '@/lib/format'
+import { formatNigerianPhone } from '@/lib/phone'
+import { listSupportGrants } from '@/lib/support'
 
 import { regenerateJoinCodeAction, updateEstateAction, uploadLogoAction } from '../actions'
 import { loadStaffEstate } from '../context'
@@ -11,11 +14,14 @@ export const metadata: Metadata = { title: 'Estate settings' }
 
 export default async function SettingsPage ({ params }: { params: Promise<{ estateId: string }> }) {
     const { estateId } = await params
-    const { estate, isAdmin } = await loadStaffEstate(estateId)
-    if (!isAdmin) notFound()
+    const { actor, estate, can } = await loadStaffEstate(estateId)
+    if (!can('estate.manage') && !can('audit.read')) notFound()
+    const grants = can('audit.read') ? await listSupportGrants(actor, estate.id) : []
 
     return (
-        <div className='grid gap-6 lg:grid-cols-[1fr_320px]'>
+        <div className='space-y-6'>
+        {can('estate.manage') && (
+        <div className='grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]'>
             <section className='card'>
                 <h1 className='text-xl font-semibold'>Estate details</h1>
                 <ActionForm action={updateEstateAction.bind(null, estate.id)} className='mt-4 grid gap-3 sm:grid-cols-2' resetOnSuccess={false}>
@@ -51,6 +57,21 @@ export default async function SettingsPage ({ params }: { params: Promise<{ esta
                     </ActionForm>
                 </section>
             </aside>
+        </div>
+        )}
+        <section className='card'>
+            <h2 className='font-semibold'>Teeco support access</h2>
+            <p className='mt-1 text-sm text-slate-600'>Teeco staff can only see your estate's data after recording a reason. Access is read-only and ends after 2 hours.</p>
+            {grants.length === 0 && <p className='mt-2 text-sm text-slate-600'>No support access so far.</p>}
+            <ul className='mt-2 divide-y divide-slate-100 text-sm'>
+                {grants.map(g => (
+                    <li key={g.id} className='py-2'>
+                        <span className='font-medium'>{g.name || formatNigerianPhone(g.phone)}</span> · {formatDateTime(g.createdAt)} · {g.reason}
+                        {g.revokedAt ? ' · closed early' : g.expiresAt > new Date() ? ' · active now' : ''}
+                    </li>
+                ))}
+            </ul>
+        </section>
         </div>
     )
 }

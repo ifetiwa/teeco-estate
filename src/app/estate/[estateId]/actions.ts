@@ -9,6 +9,7 @@ import { regenerateJoinCode, setEstateLogo, updateEstateDetails } from '@/lib/es
 import {
     addHelper, addResident, addVehicle, approveResident, moveOutResident, rejectResident, removeHelper, removeVehicle, setPrimaryContact,
 } from '@/lib/residents'
+import { addStaff, removeStaff } from '@/lib/staff'
 import { saveEstateLogo } from '@/lib/storage'
 import { addUnits, createZone, setUnitActive } from '@/lib/structure'
 
@@ -127,5 +128,19 @@ export async function regenerateJoinCodeAction (estateId: string, _: ActionState
     return withActor(estateId, async (actor) => {
         const code = await regenerateJoinCode(actor, estateId)
         return `New join code: ${code}. The old code no longer works.`
+    })
+}
+
+export async function addStaffAction (estateId: string, _: ActionState, formData: FormData) {
+    return withActor(estateId, async (actor) => {
+        const m = await addStaff(actor, estateId, formObject(formData) as never)
+        return `${m.role.replace('_', ' ')} role added.`
+    })
+}
+
+export async function removeStaffAction (estateId: string, membershipId: string, _: ActionState) {
+    return withActor(estateId, async (actor) => {
+        await removeStaff(actor, estateId, membershipId)
+        return 'Role removed.'
     })
 }

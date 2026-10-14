@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { type Actor, requireStaffRole } from '@/lib/access'
+import { withDbContext } from '@/db'
+import { type Actor, requireCapability } from '@/lib/access'
 import { randomToken } from '@/lib/crypto'
 import { AppError } from '@/lib/errors'
 
@@ -65,7 +66,7 @@ export function detectImage (data: Buffer): { type: string, ext: string } | null
 export const MAX_LOGO_BYTES = 1024 * 1024
 
 export async function saveEstateLogo (actor: Actor, estateId: string, file: Blob): Promise<string> {
-    await requireStaffRole(actor, estateId, ['estate_admin'])
+    await withDbContext({ estateId, userId: actor.userId }, tx => requireCapability(tx, actor, estateId, 'estate.manage'))
     if (file.size > MAX_LOGO_BYTES) throw new AppError('The logo must be 1 MB or smaller.')
     const data = Buffer.from(await file.arrayBuffer())
     const image = detectImage(data)

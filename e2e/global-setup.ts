@@ -11,12 +11,13 @@ export const PLATFORM_ADMIN_PHONE = '+2348030000001'
 
 /** Recreates the e2e database and the first platform admin before every run. */
 export default async function globalSetup () {
-    const url = process.env.E2E_DATABASE_URL
-    if (!url || !/e2e/.test(url)) throw new Error('E2E_DATABASE_URL must point at an e2e database')
+    const url = process.env.E2E_DATABASE_OWNER_URL
+    const appUrl = process.env.E2E_DATABASE_URL
+    if (!url || !appUrl || !/e2e/.test(url) || !/e2e/.test(appUrl)) throw new Error('E2E_DATABASE_OWNER_URL and E2E_DATABASE_URL must point at an e2e database')
     const pool = new Pool({ connectionString: url, max: 1 })
     await pool.query('drop schema if exists public cascade; drop schema if exists drizzle cascade; create schema public;')
     await pool.end()
-    await runMigrations(url)
+    await runMigrations(url, appUrl)
     const admin = new Pool({ connectionString: url, max: 1 })
     await admin.query('insert into users (phone, name, is_platform_admin) values ($1, $2, true)', [PLATFORM_ADMIN_PHONE, 'Teeco Ops'])
     await admin.end()

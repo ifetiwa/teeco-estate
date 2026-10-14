@@ -1,9 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { getDb } from '@/db'
 import { memberships, vehicles } from '@/db/schema'
-import { getEstateAccess } from '@/lib/access'
 import { createEstate, findEstateByJoinCode, listAllEstates, listMyEstates, regenerateJoinCode } from '@/lib/estates'
 import {
     addHelper, addResident, addVehicle, approveResident, countResidents, listMyOccupancies, listPendingResidents,
@@ -11,7 +9,7 @@ import {
 } from '@/lib/residents'
 import { addUnits, createZone, getUnitDetail, listZonesWithUnits, parseUnitLabels, setUnitActive } from '@/lib/structure'
 
-import { createTestEstate, createUser, nextPhone, resetDb } from './helpers'
+import { accessOf, createTestEstate, createUser, nextPhone, ownerDb, resetDb } from './helpers'
 
 beforeEach(resetDb)
 
@@ -35,7 +33,7 @@ describe('estates', () => {
         const { estate, admin } = await createTestEstate()
         expect(estate.joinCode).toMatch(/^[A-Z0-9]{6}$/)
         expect(estate.city).toBe('Abuja')
-        expect((await getEstateAccess(admin, estate.id)).staffRoles).toEqual(['estate_admin'])
+        expect((await accessOf(admin, estate.id)).staffRoles).toEqual(['estate_admin'])
         expect(await listMyEstates(admin)).toEqual([{ id: estate.id, name: 'Sunshine Estate', staffRoles: ['estate_admin'], residentStatus: null }])
     })
 
@@ -104,7 +102,7 @@ describe('residents', () => {
         const resident = await createUser({ name: '' })
         const occ = await registerAsResident(resident, { joinCode: estate.joinCode, unitId: units[1].id, name: 'Musa Danjuma', relation: 'tenant' })
         expect(occ.status).toBe('pending')
-        expect((await getEstateAccess(resident, estate.id)).residentUnitIds).toEqual([])
+        expect((await accessOf(resident, estate.id)).residentUnitIds).toEqual([])
         expect((await listMyEstates(resident))[0].residentStatus).toBe('pending')
 
         const queue = await listPendingResidents(admin, estate.id)
@@ -112,7 +110,7 @@ describe('residents', () => {
 
         const approved = await approveResident(admin, estate.id, occ.id)
         expect(approved).toMatchObject({ status: 'active', isPrimary: true, reviewedBy: admin.userId })
-        expect((await getEstateAccess(resident, estate.id)).residentUnitIds).toEqual([units[1].id])
+        expect((await accessOf(resident, estate.id)).residentUnitIds).toEqual([units[1].id])
         await expect(approveResident(admin, estate.id, occ.id)).rejects.toThrow('already been handled')
 
         const other = await createUser()
@@ -150,7 +148,7 @@ describe('residents', () => {
         const moved = await moveOutResident(admin, estate.id, owner.id, '2026-09-30')
         expect(moved).toMatchObject({ status: 'moved_out', moveOutDate: '2026-09-30', isPrimary: false })
         const ownerUser = actorForOccupancy(moved.userId!)
-        expect((await getEstateAccess(ownerUser, estate.id)).residentUnitIds).toEqual([])
+        expect((await accessOf(ownerUser, estate.id)).residentUnitIds).toEqual([])
 
         let detail = await getUnitDetail(admin, estate.id, unitId)
         expect(detail.occupants.find(o => o.id === spouse.id)?.isPrimary).toBe(true)
@@ -190,7 +188,7 @@ describe('vehicles and domestic staff', () => {
         expect(h.phone).toBe('+2348091234567')
 
         await removeVehicle(resident, estate.id, v.id)
-        const [row] = await getDb().select().from(vehicles).where(eq(vehicles.id, v.id))
+        const [row] = await ownerDb().select().from(vehicles).where(eq(vehicles.id, v.id))
         expect(row.isActive).toBe(false)
     })
 })
@@ -200,7 +198,7 @@ describe('Build 2 done-when: an estate with 20 units and 40 residents', () => {
         const platform = await createUser({ isPlatformAdmin: true })
         const adminPhone = nextPhone()
         const estate = await createEstate(platform, { name: 'Palm Springs Estate', district: 'Gwarinpa', gateCount: 2, adminName: 'Mrs Okafor', adminPhone })
-        const [m] = await getDb().select().from(memberships).where(eq(memberships.estateId, estate.id))
+        const [m] = await ownerDb().select().from(memberships).where(eq(memberships.estateId, estate.id))
         const admin = { userId: m.userId, isPlatformAdmin: false }
 
         const streetA = await createZone(admin, estate.id, { name: 'Palm Close', kind: 'close' })

@@ -7,8 +7,8 @@ import { loadStaffEstate } from './context'
 
 export default async function EstateOverview ({ params }: { params: Promise<{ estateId: string }> }) {
     const { estateId } = await params
-    const { actor, estate, isAdmin, access } = await loadStaffEstate(estateId)
-    const canSeeResidents = isAdmin || access.staffRoles.includes('finance_officer')
+    const { actor, estate, isAdmin, can } = await loadStaffEstate(estateId)
+    const canSeeResidents = can('residents.read')
     const [zones, counts] = await Promise.all([
         listZonesWithUnits(actor, estate.id),
         canSeeResidents ? countResidents(actor, estate.id) : Promise.resolve(null),
@@ -25,7 +25,7 @@ export default async function EstateOverview ({ params }: { params: Promise<{ es
                 {counts && <Stat label='Waiting for approval' value={counts.pending} highlight={counts.pending > 0} href={`${base}/residents#approvals`} />}
             </div>
 
-            {isAdmin && (
+            {can('estate.manage') && (
                 <section className='card'>
                     <h2 className='font-semibold'>Invite residents</h2>
                     <p className='mt-1 text-sm text-slate-600'>

@@ -2,11 +2,12 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { resolveEstateSettings } from '@/config/defaults'
-import { getDb } from '@/db'
+import { getDb, withDbContext } from '@/db'
 import { estates, memberships, occupancies, units, users, zones } from '@/db/schema'
-import { type Actor, requirePlatformAdmin, requireStaffRole } from '@/lib/access'
+import { type Actor, type EstateAccess, getEstateAccess, requireCapability, requirePlatformAdmin } from '@/lib/access'
+import { recordAudit } from '@/lib/audit'
 import { randomCode } from '@/lib/crypto'
-import { AppError, NotFoundError, isUniqueViolation } from '@/lib/errors'
+import { AppError, ForbiddenError, NotFoundError, isUniqueViolation } from '@/lib/errors'
 import { normalizeNigerianPhone, requireNigerianPhone } from '@/lib/phone'
 
 export type Estate = typeof estates.$inferSelect
@@ -30,11 +31,10 @@ export const createEstateSchema = estateDetailsSchema.extend({
     adminPhone: z.string().refine(v => normalizeNigerianPhone(v), 'Enter a valid Nigerian phone number'),
 })
 
-/** Finds or creates the user with this phone, filling in the name if it is still empty. */
+/** Finds or creates the user with this phone, filling in the name if it is still empty. (users is a global table.) */
 export async function ensureUserByPhone (rawPhone: string, name?: string): Promise<string> {
     const phone = requireNigerianPhone(rawPhone)
-    const db = getDb()
-    const [row] = await db.insert(users).values({ phone, name: name ?? '' })
+    const [row] = await getDb().insert(users).values({ phone, name: name ?? '' })
         .onConflictDoUpdate({
             target: users.phone,
             set: { name: sql`case when ${users.name} = '' then excluded.name else ${users.name} end` },
@@ -43,10 +43,10 @@ export async function ensureUserByPhone (rawPhone: string, name?: string): Promi
     return row.id
 }
 
-async function insertWithUniqueJoinCode<T> (insert: (joinCode: string) => Promise<T>): Promise<T> {
-    for (let attempt = 0; attempt < 5; attempt++) {
+async function withUniqueJoinCode<T> (attempt: (joinCode: string) => Promise<T>): Promise<T> {
+    for (let i = 0; i < 5; i++) {
         try {
-            return await insert(randomCode(6))
+            return await attempt(randomCode(6))
         } catch (e) {
             if (!isUniqueViolation(e)) throw e
         }
@@ -59,63 +59,68 @@ export async function createEstate (actor: Actor, input: z.input<typeof createEs
     requirePlatformAdmin(actor)
     const data = createEstateSchema.parse(input)
     const adminUserId = await ensureUserByPhone(data.adminPhone, data.adminName)
-    const db = getDb()
-    return db.transaction(async (tx) => {
-        const estate = await insertWithUniqueJoinCode(async (joinCode) => {
-            const [row] = await tx.insert(estates).values({
-                name: data.name,
-                street: data.street,
-                district: data.district,
-                city: data.city,
-                state: data.state,
-                contactPhone: data.contactPhone,
-                contactEmail: data.contactEmail,
-                gateCount: data.gateCount,
-                joinCode,
-            }).returning()
-            return row
-        })
-        await tx.insert(memberships).values({ estateId: estate.id, userId: adminUserId, role: 'estate_admin' })
+    return withUniqueJoinCode(joinCode => withDbContext({ system: true, userId: actor.userId }, async (tx) => {
+        const [estate] = await tx.insert(estates).values({
+            name: data.name,
+            street: data.street,
+            district: data.district,
+            city: data.city,
+            state: data.state,
+            contactPhone: data.contactPhone,
+            contactEmail: data.contactEmail,
+            gateCount: data.gateCount,
+            joinCode,
+        }).returning()
+        const [m] = await tx.insert(memberships).values({ estateId: estate.id, userId: adminUserId, role: 'estate_admin' }).returning()
+        await recordAudit(tx, { estateId: estate.id, actorUserId: actor.userId, action: 'estate.created', entityType: 'estate', entityId: estate.id, details: { name: estate.name } })
+        await recordAudit(tx, { estateId: estate.id, actorUserId: actor.userId, action: 'staff.role_added', entityType: 'membership', entityId: m.id, details: { role: 'estate_admin', userId: adminUserId } })
         return estate
-    })
+    }))
 }
 
 export async function updateEstateDetails (actor: Actor, estateId: string, input: z.input<typeof estateDetailsSchema>): Promise<Estate> {
-    await requireStaffRole(actor, estateId, ['estate_admin'])
     const data = estateDetailsSchema.parse(input)
-    const [row] = await getDb().update(estates).set({
-        name: data.name,
-        street: data.street,
-        district: data.district,
-        city: data.city,
-        state: data.state,
-        contactPhone: data.contactPhone ?? null,
-        contactEmail: data.contactEmail ?? null,
-        gateCount: data.gateCount,
-    }).where(eq(estates.id, estateId)).returning()
-    if (!row) throw new NotFoundError('Estate')
-    return row
-}
-
-export async function setEstateLogo (actor: Actor, estateId: string, logoPath: string | null): Promise<void> {
-    await requireStaffRole(actor, estateId, ['estate_admin'])
-    await getDb().update(estates).set({ logoPath }).where(eq(estates.id, estateId))
-}
-
-export async function regenerateJoinCode (actor: Actor, estateId: string): Promise<string> {
-    await requireStaffRole(actor, estateId, ['estate_admin'])
-    return insertWithUniqueJoinCode(async (joinCode) => {
-        await getDb().update(estates).set({ joinCode }).where(eq(estates.id, estateId))
-        return joinCode
+    return withDbContext({ estateId, userId: actor.userId }, async (tx) => {
+        await requireCapability(tx, actor, estateId, 'estate.manage')
+        const [row] = await tx.update(estates).set({
+            name: data.name,
+            street: data.street,
+            district: data.district,
+            city: data.city,
+            state: data.state,
+            contactPhone: data.contactPhone ?? null,
+            contactEmail: data.contactEmail ?? null,
+            gateCount: data.gateCount,
+        }).where(eq(estates.id, estateId)).returning()
+        if (!row) throw new NotFoundError('Estate')
+        return row
     })
 }
 
-/** Estate record for anyone who works in it (any staff role). */
-export async function getEstateForStaff (actor: Actor, estateId: string): Promise<Estate> {
-    await requireStaffRole(actor, estateId, ['estate_admin', 'finance_officer', 'guard'])
-    const [row] = await getDb().select().from(estates).where(eq(estates.id, estateId))
-    if (!row) throw new NotFoundError('Estate')
-    return row
+export async function setEstateLogo (actor: Actor, estateId: string, logoPath: string | null): Promise<void> {
+    await withDbContext({ estateId, userId: actor.userId }, async (tx) => {
+        await requireCapability(tx, actor, estateId, 'estate.manage')
+        await tx.update(estates).set({ logoPath }).where(eq(estates.id, estateId))
+    })
+}
+
+export async function regenerateJoinCode (actor: Actor, estateId: string): Promise<string> {
+    return withUniqueJoinCode(joinCode => withDbContext({ estateId, userId: actor.userId }, async (tx) => {
+        await requireCapability(tx, actor, estateId, 'estate.manage')
+        await tx.update(estates).set({ joinCode }).where(eq(estates.id, estateId))
+        return joinCode
+    }))
+}
+
+/** Estate record plus the actor's access, for anyone allowed into the staff area (staff or Teeco support). */
+export async function getEstateForStaff (actor: Actor, estateId: string): Promise<{ estate: Estate, access: EstateAccess }> {
+    return withDbContext({ estateId, userId: actor.userId }, async (tx) => {
+        const access = await getEstateAccess(tx, actor, estateId)
+        if (!access.capabilities.has('estate.view')) throw new ForbiddenError()
+        const [estate] = await tx.select().from(estates).where(eq(estates.id, estateId))
+        if (!estate) throw new NotFoundError('Estate')
+        return { estate, access }
+    })
 }
 
 export function estateSettings (estate: Pick<Estate, 'settings'>) {
@@ -126,14 +131,18 @@ export function estateSettings (estate: Pick<Estate, 'settings'>) {
 export async function findEstateByJoinCode (rawCode: string) {
     const code = rawCode.trim().toUpperCase().replace(/[\s-]/g, '')
     if (!/^[A-Z0-9]{6}$/.test(code)) throw new AppError('Join codes are 6 letters and numbers. Check the code and try again.')
-    const db = getDb()
-    const [estate] = await db.select({ id: estates.id, name: estates.name, district: estates.district, status: estates.status })
-        .from(estates).where(eq(estates.joinCode, code))
+    // System context only to resolve the code to one estate; units are then read in that estate's context.
+    const [estate] = await withDbContext({ system: true }, tx =>
+        tx.select({ id: estates.id, name: estates.name, district: estates.district, status: estates.status })
+            .from(estates).where(eq(estates.joinCode, code)))
     if (!estate) throw new AppError('No estate uses that join code. Check with your estate office.')
-    const rows = await db.select({ zoneId: zones.id, zoneName: zones.name, unitId: units.id, unitLabel: units.label })
-        .from(units).innerJoin(zones, eq(zones.id, units.zoneId))
-        .where(and(eq(units.estateId, estate.id), eq(units.isActive, true)))
-        .orderBy(asc(zones.name), asc(units.label))
+    const rows = await withDbContext({ estateId: estate.id }, tx =>
+        tx.select({ zoneId: zones.id, zoneName: zones.name, unitId: units.id, unitLabel: units.label })
+            .from(units).innerJoin(zones, eq(zones.id, units.zoneId))
+            .where(and(eq(units.estateId, estate.id), eq(units.isActive, true)))
+            .orderBy(asc(zones.name), asc(units.label)))
+    const collator = new Intl.Collator('en', { numeric: true })
+    rows.sort((a, b) => collator.compare(a.zoneName, b.zoneName) || collator.compare(a.unitLabel, b.unitLabel))
     return { estate, units: rows }
 }
 
@@ -144,17 +153,16 @@ export interface MyEstate {
     residentStatus: 'pending' | 'active' | null
 }
 
-/** Estates the user works in or lives in, for the home screen. */
+/** Estates the user works in or lives in, for the home screen. Runs in the user's own context. */
 export async function listMyEstates (actor: Actor): Promise<MyEstate[]> {
-    const db = getDb()
-    const [staff, occ] = await Promise.all([
-        db.select({ id: estates.id, name: estates.name, role: memberships.role }).from(memberships)
+    const [staff, occ] = await withDbContext({ userId: actor.userId }, tx => Promise.all([
+        tx.select({ id: estates.id, name: estates.name, role: memberships.role }).from(memberships)
             .innerJoin(estates, eq(estates.id, memberships.estateId))
             .where(and(eq(memberships.userId, actor.userId), eq(memberships.isActive, true))),
-        db.select({ id: estates.id, name: estates.name, status: occupancies.status }).from(occupancies)
+        tx.select({ id: estates.id, name: estates.name, status: occupancies.status }).from(occupancies)
             .innerJoin(estates, eq(estates.id, occupancies.estateId))
             .where(and(eq(occupancies.userId, actor.userId), sql`${occupancies.status} in ('pending', 'active')`)),
-    ])
+    ]))
     const byId = new Map<string, MyEstate>()
     const get = (id: string, name: string) => {
         if (!byId.has(id)) byId.set(id, { id, name, staffRoles: [], residentStatus: null })
@@ -168,15 +176,16 @@ export async function listMyEstates (actor: Actor): Promise<MyEstate[]> {
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
+/** Platform overview: estate names and counts only, never resident data. */
 export async function listAllEstates (actor: Actor) {
     requirePlatformAdmin(actor)
-    const db = getDb()
-    return db.select({
+    return withDbContext({ system: true }, tx => tx.select({
         id: estates.id,
         name: estates.name,
         district: estates.district,
         status: estates.status,
         createdAt: estates.createdAt,
         unitCount: sql<number>`(select count(*)::int from units u where u.estate_id = "estates"."id")`,
-    }).from(estates).orderBy(asc(estates.name))
+        residentCount: sql<number>`(select count(*)::int from occupancies o where o.estate_id = "estates"."id" and o.status = 'active')`,
+    }).from(estates).orderBy(asc(estates.name)))
 }

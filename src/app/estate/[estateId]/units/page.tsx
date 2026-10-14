@@ -12,12 +12,12 @@ export const metadata: Metadata = { title: 'Streets & units' }
 
 export default async function UnitsPage ({ params }: { params: Promise<{ estateId: string }> }) {
     const { estateId } = await params
-    const { actor, estate, isAdmin, access } = await loadStaffEstate(estateId)
+    const { actor, estate, isAdmin, can } = await loadStaffEstate(estateId)
     const zones = await listZonesWithUnits(actor, estate.id)
-    const canOpenUnit = isAdmin || access.staffRoles.includes('finance_officer')
+    const canOpenUnit = can('residents.read')
 
     return (
-        <div className='grid gap-6 lg:grid-cols-[1fr_320px]'>
+        <div className='grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]'>
             <section className='space-y-4'>
                 <h1 className='text-xl font-semibold'>Streets & units</h1>
                 {zones.length === 0 && <p className='text-slate-600'>No streets or blocks yet.</p>}

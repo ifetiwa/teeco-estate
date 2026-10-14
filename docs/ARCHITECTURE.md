@@ -36,7 +36,33 @@ Phone + SMS one-time code (6 digits, 10-minute expiry, 5 attempts, 3 sends per 1
 Sessions are random tokens in an HttpOnly cookie, stored hashed in `sessions`, 30-day rolling expiry.
 SMS goes through `SmsProvider`; development uses `ConsoleSmsProvider` (logs, and appends to `DEV_SMS_OUTBOX` if set).
 
-## Authorisation
+## Authorisation (Build 3)
 
-Domain functions in `src/lib/*` take an `Actor` and check access themselves (`requireStaffRole`, `requirePlatformAdmin`),
-so pages and server actions cannot skip checks. Every estate-owned query filters on `estate_id`.
+Two independent layers:
+
+1. **Capabilities** (`src/lib/access.ts`). Roles map to capabilities in `ROLE_CAPABILITIES`:
+
+   | Role | Can |
+   |---|---|
+   | Platform admin | Create estates, see counts only. Estate data only through a support grant. |
+   | Estate admin | Everything for their estate |
+   | Finance officer | Residents (read), finance (read/manage), reports |
+   | Guard | Estate layout, gate operations, visitor log. No residents, no finance. |
+   | Resident | Nothing estate-wide; own unit only (checked by ownership) |
+   | Support (platform admin with a grant) | Read-only: residents, finance, visitors, tickets, reports, audit |
+
+   Domain functions in `src/lib/*` call `requireCapability` themselves, so pages and actions cannot skip checks.
+
+2. **Row-level security in Postgres** (`drizzle/0002_row_level_security.sql`). The app connects as `teeco_app`, a role
+   that is not the table owner and has `NOBYPASSRLS` (created by `scripts/db-roles.ts` during migrations). Every
+   estate-owned table only returns or accepts rows whose `estate_id` matches `app.estate_id`, which
+   `withDbContext()` sets per transaction (`set_config(..., true)`, so pooled connections never carry context over).
+   A user's own memberships/occupancies are also visible via `app.user_id` ("my estates" across estates).
+   `system` context is used only for estate creation, join-code lookup and platform counts.
+   Without a context the app role sees no estate rows at all. `tests/isolation.test.ts` proves both layers.
+
+## Support access and audit
+
+A platform admin must record a reason (at least 10 characters) to open an estate. The grant lasts 2 hours, is read-only,
+shows a banner, and every page view is written to `audit_logs`. The estate admin sees all grants under Settings.
+`audit_logs` also records estate creation, staff role changes, resident approval/rejection and move-outs.
