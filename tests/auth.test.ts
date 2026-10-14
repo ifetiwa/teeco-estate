@@ -93,3 +93,36 @@ describe('sessions', () => {
         expect(await getUserBySessionToken(token)).toBeNull()
     })
 })
+
+describe('fixed test login codes (TEST_LOGIN_CODES)', () => {
+    beforeEach(resetDb)
+
+    it('parses only valid entries for the matching phone', async () => {
+        const { testLoginCodeFor } = await import('@/lib/auth/otp')
+        expect(testLoginCodeFor('+2348031234567', '0803 123 4567:482915, 08039876543:771204')).toBe('482915')
+        expect(testLoginCodeFor('+2348039876543', '08031234567:482915,08039876543:771204')).toBe('771204')
+        expect(testLoginCodeFor('+2348030000000', '08031234567:482915')).toBeNull()
+        expect(testLoginCodeFor('+2348031234567', '08031234567:12ab56')).toBeNull()
+        expect(testLoginCodeFor('+2348031234567', undefined)).toBeNull()
+    })
+
+    it('accepts the test code for the listed phone only, and the attempt limit still applies', async () => {
+        useConsoleSms()
+        const listed = nextPhone()
+        const other = nextPhone()
+        process.env.TEST_LOGIN_CODES = `${listed}:482915`
+        try {
+            await requestOtp(listed)
+            expect((await verifyOtp(listed, '482915')).isNewUser).toBe(true)
+
+            await requestOtp(other)
+            await expect(verifyOtp(other, '482915')).rejects.toThrow('not correct')
+
+            await requestOtp(listed)
+            for (let i = 0; i < OTP_MAX_ATTEMPTS; i++) await expect(verifyOtp(listed, '000001')).rejects.toThrow('not correct')
+            await expect(verifyOtp(listed, '482915')).rejects.toThrow('Too many wrong codes')
+        } finally {
+            delete process.env.TEST_LOGIN_CODES
+        }
+    })
+})

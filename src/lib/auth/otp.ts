@@ -5,7 +5,7 @@ import { getDb } from '@/db'
 import { otpCodes, users } from '@/db/schema'
 import { hmac, randomDigits, safeEqual } from '@/lib/crypto'
 import { AppError, RateLimitError } from '@/lib/errors'
-import { requireNigerianPhone } from '@/lib/phone'
+import { normalizeNigerianPhone, requireNigerianPhone } from '@/lib/phone'
 import { getSmsProvider } from '@/lib/sms'
 
 export const OTP_LENGTH = 6
@@ -13,6 +13,20 @@ export const OTP_TTL_MINUTES = 10
 export const OTP_MAX_ATTEMPTS = 5
 export const OTP_MAX_SENDS_PER_WINDOW = 3
 export const OTP_SEND_WINDOW_MINUTES = 15
+
+/**
+ * Optional fixed test codes for named phones, e.g. TEST_LOGIN_CODES="08031234567:482915,08039876543:771204".
+ * For testing before an SMS provider is connected. Set only in the host's secret settings, never in the repo,
+ * and remove before real residents use the system. The normal attempt limit still applies.
+ */
+export function testLoginCodeFor (phone: string, raw: string | undefined = process.env.TEST_LOGIN_CODES): string | null {
+    if (!raw) return null
+    for (const entry of raw.split(',')) {
+        const [p, c] = entry.split(':').map(x => x.trim())
+        if (p && c && /^\d{6}$/.test(c) && normalizeNigerianPhone(p) === phone) return c
+    }
+    return null
+}
 
 function hashCode (phone: string, code: string): string {
     return hmac(`otp:${phone}:${code}`)
@@ -53,7 +67,9 @@ export async function verifyOtp (rawPhone: string, rawCode: string): Promise<{ u
     if (!otp) throw new AppError('This code has expired. Please request a new one.', 'OTP_EXPIRED')
     if (otp.attempts >= OTP_MAX_ATTEMPTS) throw new RateLimitError('Too many wrong codes. Please request a new one.')
 
-    if (!/^\d+$/.test(code) || !safeEqual(otp.codeHash, hashCode(phone, code))) {
+    const testCode = testLoginCodeFor(phone)
+    const matches = /^\d+$/.test(code) && (safeEqual(otp.codeHash, hashCode(phone, code)) || (testCode !== null && safeEqual(testCode, code)))
+    if (!matches) {
         await db.update(otpCodes).set({ attempts: sql`${otpCodes.attempts} + 1` }).where(eq(otpCodes.id, otp.id))
         throw new AppError('That code is not correct.', 'OTP_WRONG')
     }
