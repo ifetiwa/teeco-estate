@@ -16,11 +16,13 @@ export async function ensureAppRole (ownerUrl: string, appUrl: string): Promise<
 
     const pool = new Pool({ connectionString: ownerUrl, max: 1 })
     try {
-        const { rows } = await pool.query('select 1 from pg_roles where rolname = $1', [role])
+        const { rows } = await pool.query<{ rolsuper: boolean, rolbypassrls: boolean }>('select rolsuper, rolbypassrls from pg_roles where rolname = $1', [role])
         if (rows.length === 0) {
             await pool.query(`create role ${ident} login password ${lit(password)} nosuperuser nocreatedb nocreaterole nobypassrls`)
         } else {
-            await pool.query(`alter role ${ident} login password ${lit(password)} nosuperuser nobypassrls`)
+            // Managed hosts (e.g. Neon) only let real superusers touch SUPERUSER/BYPASSRLS, so verify instead of re-asserting
+            if (rows[0].rolsuper || rows[0].rolbypassrls) throw new Error(`Role ${role} must not be a superuser or bypass row-level security`)
+            await pool.query(`alter role ${ident} login password ${lit(password)}`)
         }
         const db = (await pool.query('select current_database() as db')).rows[0].db as string
         await pool.query(`grant connect on database "${db}" to ${ident}`)
