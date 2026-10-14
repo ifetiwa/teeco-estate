@@ -7,6 +7,6 @@
 | Pricing model and fee levels | Build 6 and 11 | Open |
 | SMS provider and sender ID | Build 8 | Open. Termii assumed, behind an interface; dev uses a console provider. |
 | Paystack business account | Build 6 | Open. Build 6 is developed against test-mode keys. |
-| Hosting provider and region | Build 14 | Interim: Vercel (Hobby) at https://teeco-estate.vercel.app, deployed from `teeco/main` with `vercel deploy --prod`. Database not connected yet: owner chose not to use the existing paid Neon org; a free Postgres (e.g. a Neon free account) is pending. Note: Vercel Hobby is for non-commercial use; a paid plan or other host is needed before charging estates. |
+| Hosting provider and region | Build 14 | Interim: Vercel (Hobby) at https://teeco-estate.vercel.app, functions in Frankfurt (fra1), deployed from `teeco/main` with `vercel deploy --prod`. Database: Neon **free** plan (separate account, not the paid teeco2010 org), project `teeco-estate` in aws-eu-central-1 (Frankfurt); app connects as restricted role `teeco_app` via the pooler. Vercel Hobby is for non-commercial use; a paid plan or other host is needed before charging estates. |
 | Lawyer for NDPA and contracts | Build 12 | Open |
 | Pilot estates | Build 15 | Open |
