@@ -44,11 +44,16 @@ export default async function GatePage ({ params }: { params: Promise<{ estateId
     return (
         <>
             <AppHeader user={user} />
-            <main className='mx-auto max-w-lg px-4 py-4'>
-                <div className='mb-4 flex items-center justify-between'>
-                    <h1 className='text-xl font-semibold'>{estate.name} gate</h1>
-                    {access.capabilities.has('estate.manage') && <Link href={`/estate/${estate.id}`} className='text-sm underline'>Estate admin</Link>}
+            <div className='bg-gradient-to-r from-brand-800 to-brand-600 text-white'>
+                <div className='mx-auto flex max-w-lg items-center justify-between gap-3 px-4 py-4'>
+                    <div>
+                        <p className='text-sm text-brand-100'>Gate console</p>
+                        <h1 className='text-xl font-bold'>{estate.name} gate</h1>
+                    </div>
+                    {access.capabilities.has('estate.manage') && <Link href={`/estate/${estate.id}`} className='rounded-lg bg-white/15 px-3 py-2 text-sm font-semibold hover:bg-white/25'>Estate admin</Link>}
                 </div>
+            </div>
+            <main className='mx-auto max-w-lg px-4 py-5'>
                 <GateConsole
                     estateId={estate.id}
                     gateCount={board.gateCount}

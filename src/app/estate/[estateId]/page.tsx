@@ -1,59 +1,101 @@
+import { CheckCircle2, Circle, Clock, DoorOpen, House, KeyRound, MapPin, ScrollText, UserCheck, Users } from 'lucide-react'
 import Link from 'next/link'
 
+import { CopyButton } from '@/components/CopyButton'
+import { Badge, EmptyState, PageHeader, SectionCard, StatCard, VISIT_STATUS_TONE } from '@/components/ui'
+import { formatDateTime } from '@/lib/format'
 import { countResidents } from '@/lib/residents'
+import { listStaff } from '@/lib/staff'
 import { listZonesWithUnits } from '@/lib/structure'
+import { listVisitorLog, visitStatusLabel } from '@/lib/visitors'
 
 import { loadStaffEstate } from './context'
 
 export default async function EstateOverview ({ params }: { params: Promise<{ estateId: string }> }) {
     const { estateId } = await params
-    const { actor, estate, isAdmin, can } = await loadStaffEstate(estateId)
-    const canSeeResidents = can('residents.read')
-    const [zones, counts] = await Promise.all([
+    const { actor, estate, can } = await loadStaffEstate(estateId)
+    const [zones, counts, visits, staff] = await Promise.all([
         listZonesWithUnits(actor, estate.id),
-        canSeeResidents ? countResidents(actor, estate.id) : Promise.resolve(null),
+        can('residents.read') ? countResidents(actor, estate.id) : Promise.resolve(null),
+        can('visitors.read') ? listVisitorLog(actor, estate.id, { limit: 8 }) : Promise.resolve([]),
+        can('staff.manage') ? listStaff(actor, estate.id) : Promise.resolve([]),
     ])
     const unitCount = zones.reduce((n, z) => n + z.units.filter(u => u.isActive).length, 0)
+    const occupied = zones.reduce((n, z) => n + z.units.filter(u => u.occupantCount > 0).length, 0)
+    const insideNow = visits.filter(v => v.visit.status === 'checked_in').length
     const base = `/estate/${estate.id}`
+    const checklist = [
+        { done: zones.length > 0 && unitCount > 0, label: 'Add streets or blocks and their houses', href: `${base}/units` },
+        { done: staff.some(s => s.isActive && s.role === 'guard'), label: 'Add your gate guards', href: `${base}/staff` },
+        { done: (counts?.active ?? 0) > 0, label: 'Add residents or share the join code', href: `${base}/residents` },
+    ]
 
     return (
         <div className='space-y-6'>
-            <div className='grid gap-3 sm:grid-cols-4'>
-                <Stat label='Streets & blocks' value={zones.length} />
-                <Stat label='Units' value={unitCount} />
-                {counts && <Stat label='Residents' value={counts.active} />}
-                {counts && <Stat label='Waiting for approval' value={counts.pending} highlight={counts.pending > 0} href={`${base}/residents#approvals`} />}
+            <PageHeader title='Overview' description='How the estate is doing today.' />
+
+            <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+                <StatCard label='Units' value={unitCount} icon={House} hint={`${zones.length} streets/blocks · ${occupied} occupied`} />
+                {counts && <StatCard label='Residents' value={counts.active} icon={Users} tone='slate' />}
+                {counts && <StatCard label='Waiting for approval' value={counts.pending} icon={UserCheck} tone={counts.pending > 0 ? 'accent' : 'slate'} href={`${base}/residents#approvals`} />}
+                {can('visitors.read') && <StatCard label='Visitors inside now' value={insideNow} icon={DoorOpen} tone='accent' href={can('gate.operate') ? `/gate/${estate.id}` : `${base}/visitors`} />}
             </div>
 
-            {can('estate.manage') && (
-                <section className='card'>
-                    <h2 className='font-semibold'>Invite residents</h2>
-                    <p className='mt-1 text-sm text-slate-600'>
-                        Share this join code. Residents sign in with their phone, enter the code and choose their house; you approve them.
-                    </p>
-                    <p className='mt-3 font-mono text-3xl tracking-[0.3em] text-brand-800'>{estate.joinCode}</p>
-                </section>
-            )}
+            <div className='grid gap-6 lg:grid-cols-2'>
+                {can('estate.manage') && (
+                    <SectionCard title='Invite residents' description='Residents sign in with their phone, enter this code, and you approve them.' icon={KeyRound}>
+                        <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl bg-brand-50 p-4'>
+                            <p className='font-mono text-3xl font-bold tracking-[0.3em] text-brand-800'>{estate.joinCode}</p>
+                            <CopyButton text={`Join ${estate.name} on Teeco Estate: sign in with your phone and enter join code ${estate.joinCode}.`} label='Copy invite' />
+                        </div>
+                    </SectionCard>
+                )}
 
-            {isAdmin && unitCount === 0 && (
-                <section className='card border-accent-500'>
-                    <h2 className='font-semibold'>Get started</h2>
-                    <ol className='mt-2 list-decimal space-y-1 pl-5 text-sm'>
-                        <li><Link className='underline' href={`${base}/units`}>Add your streets or blocks and their houses</Link></li>
-                        <li><Link className='underline' href={`${base}/residents`}>Add residents, or share the join code</Link></li>
-                    </ol>
-                </section>
-            )}
+                {can('estate.manage') && (
+                    <SectionCard title='Setup checklist' icon={CheckCircle2}>
+                        <ul className='space-y-1'>
+                            {checklist.map(c => (
+                                <li key={c.label}>
+                                    <Link href={c.href} className='flex items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-slate-50'>
+                                        {c.done ? <CheckCircle2 className='h-5 w-5 text-brand-600' aria-hidden /> : <Circle className='h-5 w-5 text-slate-300' aria-hidden />}
+                                        <span className={c.done ? 'text-slate-500 line-through' : 'font-medium'}>{c.label}</span>
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                    </SectionCard>
+                )}
+
+                {can('visitors.read') && (
+                    <SectionCard title='Recent visitors' icon={ScrollText} className='lg:col-span-2'
+                        actions={<Link href={`${base}/visitors`} className='text-sm font-medium text-brand-700 hover:underline'>Full log</Link>}>
+                        {visits.length === 0
+                            ? <EmptyState icon={Clock} title='No visitors yet'>Passes created by residents and walk-ins at the gate appear here.</EmptyState>
+                            : (
+                                <ul className='-mx-2 divide-y divide-slate-100'>
+                                    {visits.map(({ visit: v, unitLabel, zoneName }) => (
+                                        <li key={v.id} className='flex flex-wrap items-center justify-between gap-2 px-2 py-2.5 text-sm'>
+                                            <span className='min-w-0'>
+                                                <span className='font-medium'>{v.visitorName}</span>
+                                                <span className='text-slate-500'> → {unitLabel}, {zoneName}</span>
+                                            </span>
+                                            <span className='flex items-center gap-2'>
+                                                <span className='text-xs text-slate-500'>{formatDateTime(v.createdAt)}</span>
+                                                <Badge tone={VISIT_STATUS_TONE[v.status]}>{visitStatusLabel(v.status)}</Badge>
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                    </SectionCard>
+                )}
+
+                {!can('visitors.read') && !can('estate.manage') && (
+                    <SectionCard title='Streets & units' icon={MapPin}>
+                        <p className='text-sm text-slate-600'>See the estate layout under Streets & units.</p>
+                    </SectionCard>
+                )}
+            </div>
         </div>
     )
-}
-
-function Stat ({ label, value, highlight, href }: { label: string, value: number, highlight?: boolean, href?: string }) {
-    const body = (
-        <>
-            <p className='text-sm text-slate-600'>{label}</p>
-            <p className={`mt-1 text-2xl font-semibold ${highlight ? 'text-accent-500' : ''}`}>{value}</p>
-        </>
-    )
-    return href ? <Link href={href} className='card block hover:border-brand-600'>{body}</Link> : <div className='card'>{body}</div>
 }

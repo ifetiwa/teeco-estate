@@ -1,6 +1,6 @@
 import { and, eq, gt, isNull } from 'drizzle-orm'
 
-import type { Queryable } from '@/db'
+import { type Queryable, inOrder } from '@/db'
 import { memberships, occupancies, supportAccessGrants } from '@/db/schema'
 import { ForbiddenError } from '@/lib/errors'
 
@@ -70,7 +70,7 @@ export function capabilitiesFor (roles: EstateRole[]): Set<Capability> {
 
 /** Must run inside withDbContext({ estateId, userId }) so RLS lets the actor's own rows through. */
 export async function getEstateAccess (tx: Queryable, actor: Actor, estateId: string): Promise<EstateAccess> {
-    const [staff, occ, grants] = await Promise.all([
+    const [staff, occ, grants] = await inOrder([
         tx.select({ role: memberships.role }).from(memberships)
             .where(and(eq(memberships.estateId, estateId), eq(memberships.userId, actor.userId), eq(memberships.isActive, true))),
         tx.select({ unitId: occupancies.unitId }).from(occupancies)

@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gt, gte, ilike, inArray, lt, lte, ne, or, sql } fro
 import { z } from 'zod'
 
 import { type EstateSettings, resolveEstateSettings } from '@/config/defaults'
-import { type Queryable, type Tx, withDbContext } from '@/db'
+import { type Queryable, type Tx, inOrder, withDbContext } from '@/db'
 import { blockedVisitors, estates, gateCodeAttempts, occupancies, units, visitorPasses, visits, zones } from '@/db/schema'
 import { type Actor, type EstateAccess, getEstateAccess, requireCapability } from '@/lib/access'
 import { recordAudit } from '@/lib/audit'
@@ -139,7 +139,7 @@ export async function cancelPass (actor: Actor, estateId: string, passId: string
 export async function listUnitPasses (actor: Actor, estateId: string, unitId: string) {
     return withDbContext({ estateId, userId: actor.userId }, async (tx) => {
         requireResidentOf(await getEstateAccess(tx, actor, estateId), unitId)
-        const [passes, recentVisits] = await Promise.all([
+        const [passes, recentVisits] = await inOrder([
             tx.select().from(visitorPasses).where(eq(visitorPasses.unitId, unitId)).orderBy(desc(visitorPasses.createdAt)).limit(30),
             tx.select().from(visits).where(eq(visits.unitId, unitId)).orderBy(desc(visits.createdAt)).limit(30),
         ])

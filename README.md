@@ -22,6 +22,7 @@ npm run db:migrate              # apply migrations to DATABASE_URL
 npm run dev                     # http://localhost:3000
 npm test                        # unit/integration tests against TEST_DATABASE_URL (schema is recreated)
 npm run create-platform-admin -- 08031234567 "Your Name"   # first Teeco admin
+npm run seed:demo -- 08031234567   # demo estates; you become admin of all of them (re-run to reset)
 npx next build && npm run test:e2e  # browser tests against E2E_DATABASE_URL (npx playwright install chromium once)
 ```
 

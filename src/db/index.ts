@@ -59,3 +59,13 @@ export async function withDbContext<T> (ctx: DbContext, fn: (tx: Tx) => Promise<
         return fn(tx)
     })
 }
+
+/**
+ * Awaits lazy query builders one after another. A transaction uses a single connection, so running its
+ * queries "in parallel" with Promise.all gains nothing and is deprecated by node-postgres.
+ */
+export async function inOrder<const T extends readonly unknown[]> (items: T): Promise<{ -readonly [K in keyof T]: Awaited<T[K]> }> {
+    const out: unknown[] = []
+    for (const item of items) out.push(await item)
+    return out as { -readonly [K in keyof T]: Awaited<T[K]> }
+}

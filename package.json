@@ -17,10 +17,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "create-platform-admin": "tsx scripts/create-platform-admin.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",
+    "lucide-react": "^1.57.0",
     "next": "^16.4.0",
     "pg": "^8.23.1",
     "qrcode": "^1.5.4",

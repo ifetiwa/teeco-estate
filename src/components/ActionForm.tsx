@@ -32,8 +32,8 @@ export function ActionForm ({ action, children, className, resetOnSuccess = true
             <FieldErrorsContext.Provider value={state.fieldErrors}>
                 {children}
             </FieldErrorsContext.Provider>
-            {state.error && <p role='alert' className='mt-2 text-sm text-red-700'>{state.error}</p>}
-            {state.ok && state.message && <p role='status' className='mt-2 text-sm text-brand-700'>{state.message}</p>}
+            {state.error && <p role='alert' className='mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 ring-1 ring-red-200'>{state.error}</p>}
+            {state.ok && state.message && <p role='status' className='mt-3 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-800 ring-1 ring-brand-200'>{state.message}</p>}
         </form>
     )
 }
@@ -42,11 +42,11 @@ export function Field ({ label, name, hint, children }: { label: string, name: s
     const errors = useContext(FieldErrorsContext)
     const error = errors?.[name]
     return (
-        <div className='flex flex-col gap-1'>
+        <div className='flex flex-col gap-1.5'>
             <label htmlFor={name}>{label}</label>
             {children}
             {hint && !error && <p className='text-xs text-slate-500'>{hint}</p>}
-            {error && <p className='text-xs text-red-700'>{error}</p>}
+            {error && <p className='text-xs font-medium text-red-600'>{error}</p>}
         </div>
     )
 }

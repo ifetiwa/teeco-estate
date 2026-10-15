@@ -8,7 +8,7 @@ const NEW_RESIDENT_PHONE = '08035550999'
 test('Build 2: admin sets up 20 units and 40 residents; a self-registered resident reaches the approval queue', async ({ page }) => {
     // Platform admin creates the estate
     await signIn(page, '08030000001')
-    await page.getByRole('link', { name: 'Platform' }).click()
+    await page.getByRole('link', { name: 'Platform', exact: true }).click()
     await page.getByLabel('Estate name').fill('Palm Springs Estate')
     await page.getByLabel('District').fill('Gwarinpa')
     await page.getByLabel('Number of gates').fill('2')
@@ -18,14 +18,14 @@ test('Build 2: admin sets up 20 units and 40 residents; a self-registered reside
     const created = page.getByRole('status')
     await expect(created).toContainText('Palm Springs Estate created. Join code:')
     const joinCode = (await created.textContent())!.match(/Join code: ([A-Z0-9]{6})/)![1]
-    await expect(page.getByRole('cell', { name: 'Palm Springs Estate' })).toBeVisible()
+    await expect(page.getByRole('row', { name: /Palm Springs Estate/ })).toBeVisible()
     await signOut(page)
 
     // Estate admin builds the structure
     await signIn(page, ADMIN_PHONE)
     await page.getByRole('link', { name: /Palm Springs Estate/ }).click()
     await expect(page.getByText(joinCode)).toBeVisible()
-    await page.getByRole('link', { name: 'Streets & units' }).click()
+    await page.getByRole('link', { name: 'Streets & units', exact: true }).click()
 
     for (const [zone, kind, labels, type] of [['Palm Close', 'close', '1-10', 'duplex'], ['Block D', 'block', 'Flat 1-Flat 10', 'flat']]) {
         await page.getByLabel('Name', { exact: true }).fill(zone)
@@ -57,7 +57,7 @@ test('Build 2: admin sets up 20 units and 40 residents; a self-registered reside
         await expect(page.locator('li span', { hasText: /^Primary contact$/ })).toHaveCount(1)
     }
 
-    await page.getByRole('link', { name: 'Overview' }).click()
+    await page.getByRole('link', { name: 'Overview', exact: true }).click()
     await expect(page.locator('.card', { hasText: 'Units' }).first()).toContainText('20')
     await expect(page.locator('.card', { hasText: 'Residents' }).first()).toContainText('40')
     await signOut(page)
@@ -81,7 +81,7 @@ test('Build 2: admin sets up 20 units and 40 residents; a self-registered reside
     await signIn(page, ADMIN_PHONE)
     await page.getByRole('link', { name: /Palm Springs Estate/ }).click()
     await expect(page.locator('.card', { hasText: 'Waiting for approval' })).toContainText('1')
-    await page.getByRole('link', { name: 'Residents' }).click()
+    await page.getByRole('link', { name: 'Residents', exact: true }).click()
     const queue = page.locator('#approvals')
     await expect(queue).toContainText('Musa Danjuma')
     await expect(queue).toContainText('7, Palm Close · Tenant · 0803 555 0999')

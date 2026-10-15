@@ -1,7 +1,9 @@
+import { KeyRound } from 'lucide-react'
 import type { Metadata } from 'next'
 
 import { ActionForm, Field, SubmitButton } from '@/components/ActionForm'
 import { AppHeader } from '@/components/AppHeader'
+import { PageHeader, SectionCard } from '@/components/ui'
 import { requireUser } from '@/lib/auth/current'
 import { findEstateByJoinCode } from '@/lib/estates'
 import { AppError } from '@/lib/errors'
@@ -30,24 +32,26 @@ export default async function JoinPage ({ searchParams }: { searchParams: Promis
     return (
         <>
             <AppHeader user={user} />
-            <main className='mx-auto max-w-md px-4 py-6'>
-                <h1 className='text-2xl font-semibold'>Join an estate</h1>
+            <main className='mx-auto max-w-lg px-4 py-8'>
+                <PageHeader title='Join an estate' back={{ href: '/app', label: 'Home' }} description={found ? undefined : 'Enter the code from your estate office.'} />
                 {!found && (
-                    <ActionForm action={lookupJoinCodeAction} className='mt-6 flex flex-col gap-4' resetOnSuccess={false}>
-                        <Field label='Estate join code' name='joinCode' hint='6 letters and numbers, from your estate office'>
-                            <input id='joinCode' name='joinCode' defaultValue={code} required maxLength={8} autoCapitalize='characters' className='uppercase tracking-widest' />
-                        </Field>
-                        {lookupError && <p className='text-sm text-red-700'>{lookupError}</p>}
-                        <SubmitButton>Continue</SubmitButton>
-                    </ActionForm>
+                    <SectionCard icon={KeyRound} title='Estate join code'>
+                        <ActionForm action={lookupJoinCodeAction} className='flex flex-col gap-4' resetOnSuccess={false}>
+                            <Field label='Estate join code' name='joinCode' hint='6 letters and numbers, from your estate office'>
+                                <input id='joinCode' name='joinCode' defaultValue={code} required maxLength={8} autoCapitalize='characters' className='text-center font-mono text-2xl uppercase tracking-[0.3em]' />
+                            </Field>
+                            {lookupError && <p className='rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200'>{lookupError}</p>}
+                            <SubmitButton className='w-full py-3'>Continue</SubmitButton>
+                        </ActionForm>
+                    </SectionCard>
                 )}
                 {found && (
-                    <>
-                        <p className='mt-2 text-slate-600'>
+                    <SectionCard>
+                        <p className='rounded-lg bg-brand-50 px-3 py-2 text-brand-800'>
                             Joining <strong>{found.estate.name}</strong>{found.estate.district ? `, ${found.estate.district}` : ''}.
                             The estate admin will approve your request.
                         </p>
-                        <ActionForm action={registerAction} className='mt-6 flex flex-col gap-4' resetOnSuccess={false}>
+                        <ActionForm action={registerAction} className='mt-5 flex flex-col gap-4' resetOnSuccess={false}>
                             <input type='hidden' name='joinCode' value={code} />
                             <Field label='Your full name' name='name'>
                                 <input id='name' name='name' defaultValue={user.name} required autoComplete='name' />
@@ -77,9 +81,9 @@ export default async function JoinPage ({ searchParams }: { searchParams: Promis
                             <Field label='Move-in date (optional)' name='moveInDate'>
                                 <input id='moveInDate' name='moveInDate' type='date' />
                             </Field>
-                            <SubmitButton>Send request</SubmitButton>
+                            <SubmitButton className='w-full py-3'>Send request</SubmitButton>
                         </ActionForm>
-                    </>
+                    </SectionCard>
                 )}
             </main>
         </>

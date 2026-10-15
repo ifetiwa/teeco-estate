@@ -1,36 +1,74 @@
 @import "tailwindcss";
 
-/* Brand colours; keep in sync with src/config/brand.ts */
+/* Brand tokens; keep in sync with src/config/brand.ts */
 @theme {
-    --color-brand-50: #ecf8f1;
-    --color-brand-100: #d1efdd;
+    --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+    --color-brand-50: #eef8f2;
+    --color-brand-100: #d5eedf;
+    --color-brand-200: #abdcc0;
+    --color-brand-300: #77c39b;
+    --color-brand-500: #2a8a5c;
     --color-brand-600: #157347;
     --color-brand-700: #0f5132;
     --color-brand-800: #0a3622;
+    --color-brand-900: #062417;
+
+    --color-accent-50: #fdf8e8;
+    --color-accent-100: #f9ecc2;
+    --color-accent-400: #e2b93b;
     --color-accent-500: #d4a017;
+    --color-accent-600: #a87d0f;
+
+    --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+    --shadow-raised: 0 4px 12px rgb(15 23 42 / 0.08), 0 1px 3px rgb(15 23 42 / 0.06);
 }
 
 @layer base {
-    input, select, textarea {
-        @apply rounded-md border border-slate-300 bg-white px-3 py-2 text-base focus:border-brand-600 focus:ring-2 focus:ring-brand-100 focus:outline-none;
+    html {
+        -webkit-tap-highlight-color: transparent;
+    }
+    body {
+        @apply bg-slate-50 font-sans text-slate-900;
+    }
+    input:not([type=checkbox]):not([type=radio]):not([type=file]), select, textarea {
+        @apply rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 focus:outline-none;
+    }
+    input[type=checkbox] {
+        @apply accent-brand-600;
     }
     label {
         @apply text-sm font-medium text-slate-700;
     }
+    h1, h2, h3 {
+        @apply tracking-tight;
+    }
 }
 
 @utility btn {
-    @apply inline-flex items-center justify-center rounded-md px-4 py-2 font-medium transition disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition focus-visible:ring-4 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50;
 }
 @utility btn-primary {
-    @apply btn bg-brand-700 text-white hover:bg-brand-800;
+    @apply btn bg-brand-700 text-white shadow-sm hover:bg-brand-800 focus-visible:ring-brand-200;
 }
 @utility btn-secondary {
-    @apply btn border border-slate-300 bg-white text-slate-800 hover:bg-slate-50;
+    @apply btn border border-slate-300 bg-white text-slate-800 shadow-sm hover:border-slate-400 hover:bg-slate-50 focus-visible:ring-slate-200;
 }
 @utility btn-danger {
-    @apply btn bg-red-700 text-white hover:bg-red-800;
+    @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700 focus-visible:ring-red-200;
+}
+@utility btn-ghost {
+    @apply btn text-slate-700 hover:bg-slate-100 focus-visible:ring-slate-200;
 }
 @utility card {
-    @apply rounded-lg border border-slate-200 bg-white p-4 shadow-sm;
+    @apply rounded-2xl border border-slate-200/80 bg-white p-5 shadow-(--shadow-card);
+}
+@utility card-link {
+    @apply card block transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-(--shadow-raised);
+}
+@utility table-wrap {
+    @apply overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-(--shadow-card);
+}
+@utility data-table {
+    @apply w-full text-left text-sm [&_td]:px-4 [&_td]:py-3 [&_th]:px-4 [&_th]:py-3 [&_th]:text-xs [&_th]:font-semibold [&_th]:tracking-wide [&_th]:text-slate-500 [&_th]:uppercase [&_thead]:bg-slate-50 [&_tbody_tr]:border-t [&_tbody_tr]:border-slate-100 [&_tbody_tr:hover]:bg-slate-50/60;
 }

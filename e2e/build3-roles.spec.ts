@@ -7,7 +7,7 @@ const GUARD = '08035550201'
 
 test('Build 3: guard is limited to the gate area; platform support access is reasoned, read-only and logged', async ({ page }) => {
     await signIn(page, '08030000001')
-    await page.getByRole('link', { name: 'Platform' }).click()
+    await page.getByRole('link', { name: 'Platform', exact: true }).click()
     await page.getByLabel('Estate name').fill('Guarded Gardens')
     await page.getByLabel('Estate admin / chairman name').fill('Mr Adamu')
     await page.getByLabel('Estate admin phone').fill(ADMIN)
@@ -20,7 +20,7 @@ test('Build 3: guard is limited to the gate area; platform support access is rea
     await page.getByRole('link', { name: /Guarded Gardens/ }).click()
     await page.waitForURL(/\/estate\/[0-9a-f-]{36}$/)
     const estateUrl = page.url()
-    await page.getByRole('link', { name: 'Staff' }).click()
+    await page.getByRole('link', { name: 'Staff', exact: true }).click()
     await page.getByLabel('Name', { exact: true }).fill('Sule Guard')
     await page.getByLabel('Phone', { exact: true }).fill(GUARD)
     await page.getByLabel('Role').selectOption('guard')
@@ -33,9 +33,9 @@ test('Build 3: guard is limited to the gate area; platform support access is rea
     await page.getByRole('link', { name: /Guarded Gardens/ }).click()
     await page.waitForURL(/\/gate\//) // guards land on the gate screen
     await page.goto(estateUrl)
-    await expect(page.getByRole('link', { name: 'Streets & units' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Residents' })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Staff' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Streets & units', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Residents', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Staff', exact: true })).toHaveCount(0)
     for (const path of ['/residents', '/staff', '/settings']) {
         const res = await page.goto(estateUrl + path)
         expect(res?.status()).toBe(404)
@@ -51,8 +51,8 @@ test('Build 3: guard is limited to the gate area; platform support access is rea
     await estateRow.getByRole('textbox').fill('Ticket 42: chairman cannot see units')
     await estateRow.getByRole('button', { name: 'Open' }).click()
     await expect(page.getByText('Teeco support access: read-only.')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Staff' })).toHaveCount(0)
-    await page.getByRole('link', { name: 'Streets & units' }).click()
+    await expect(page.getByRole('link', { name: 'Staff', exact: true })).toHaveCount(0)
+    await page.getByRole('link', { name: 'Streets & units', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Add a street or block' })).toHaveCount(0)
     await signOut(page)
 

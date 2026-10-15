@@ -2,7 +2,7 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { resolveEstateSettings } from '@/config/defaults'
-import { getDb, withDbContext } from '@/db'
+import { getDb, inOrder, withDbContext } from '@/db'
 import { estates, memberships, occupancies, units, users, zones } from '@/db/schema'
 import { type Actor, type EstateAccess, getEstateAccess, requireCapability, requirePlatformAdmin } from '@/lib/access'
 import { recordAudit } from '@/lib/audit'
@@ -155,7 +155,7 @@ export interface MyEstate {
 
 /** Estates the user works in or lives in, for the home screen. Runs in the user's own context. */
 export async function listMyEstates (actor: Actor): Promise<MyEstate[]> {
-    const [staff, occ] = await withDbContext({ userId: actor.userId }, tx => Promise.all([
+    const [staff, occ] = await withDbContext({ userId: actor.userId }, tx => inOrder([
         tx.select({ id: estates.id, name: estates.name, role: memberships.role }).from(memberships)
             .innerJoin(estates, eq(estates.id, memberships.estateId))
             .where(and(eq(memberships.userId, actor.userId), eq(memberships.isActive, true))),

@@ -13,7 +13,7 @@ export function PhoneInput ({ name, defaultValue = '', required = true, autoFocu
     return (
         <div className='flex flex-col gap-1'>
             <div className='flex'>
-                <span className='inline-flex items-center rounded-l-md border border-r-0 border-slate-300 bg-slate-100 px-3 text-slate-600'>+234</span>
+                <span className='inline-flex items-center rounded-l-lg border border-r-0 border-slate-300 bg-slate-50 px-3 text-sm font-semibold whitespace-nowrap text-slate-600'>+234</span>
                 <input
                     id={name}
                     name={name}
@@ -27,7 +27,7 @@ export function PhoneInput ({ name, defaultValue = '', required = true, autoFocu
                     onChange={(e) => setValue(e.target.value)}
                     onBlur={() => setTouched(true)}
                     aria-invalid={showError}
-                    className={`w-full rounded-l-none ${showError ? 'border-red-600' : ''}`}
+                    className={`w-full min-w-0 rounded-l-none ${showError ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : ''}`}
                 />
             </div>
             {showError && <p className='text-xs text-red-700'>Enter a Nigerian mobile number, e.g. 0803 123 4567</p>}

@@ -1,3 +1,4 @@
+import { ChevronRight, Clock, QrCode, Ticket } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -5,6 +6,7 @@ import { notFound } from 'next/navigation'
 import { ActionForm, Field, SubmitButton } from '@/components/ActionForm'
 import { AppHeader } from '@/components/AppHeader'
 import { PhoneInput } from '@/components/PhoneInput'
+import { Badge, type BadgeTone, EmptyState, PageHeader, SectionCard, VISIT_STATUS_TONE } from '@/components/ui'
 import { actorFromUser } from '@/lib/access'
 import { requireUser } from '@/lib/auth/current'
 import { NotFoundError } from '@/lib/errors'
@@ -16,7 +18,13 @@ import { cancelPassAction, createPassAction } from '../actions'
 
 export const metadata: Metadata = { title: 'Visitor passes' }
 
-const STATE_LABEL: Record<string, string> = { active: 'Active', not_yet_valid: 'Upcoming', expired: 'Expired', used: 'Used', cancelled: 'Cancelled' }
+const STATE: Record<string, { label: string, tone: BadgeTone }> = {
+    active: { label: 'Active', tone: 'green' },
+    not_yet_valid: { label: 'Upcoming', tone: 'blue' },
+    expired: { label: 'Expired', tone: 'slate' },
+    used: { label: 'Used', tone: 'slate' },
+    cancelled: { label: 'Cancelled', tone: 'red' },
+}
 
 export default async function PassesPage ({ params }: { params: Promise<{ occupancyId: string }> }) {
     const { occupancyId } = await params
@@ -38,14 +46,10 @@ export default async function PassesPage ({ params }: { params: Promise<{ occupa
         <>
             <AppHeader user={user} />
             <main className='mx-auto max-w-3xl space-y-6 px-4 py-6'>
-                <div>
-                    <Link href={`/home/${occupancyId}`} className='text-sm text-brand-700 underline'>← {home.unit.label}, {home.zone.name}</Link>
-                    <h1 className='mt-2 text-xl font-semibold'>Visitor passes</h1>
-                </div>
+                <PageHeader back={{ href: `/home/${occupancyId}`, label: `${home.unit.label}, ${home.zone.name}` }} title='Visitor passes' description='Create a code, share it, and the gate will let your visitor in.' />
 
-                <section className='card'>
-                    <h2 className='font-semibold'>New pass</h2>
-                    <ActionForm action={createPassAction.bind(null, occupancyId)} className='mt-3 grid gap-3 sm:grid-cols-2' resetOnSuccess={false}>
+                <SectionCard title='New pass' icon={QrCode}>
+                    <ActionForm action={createPassAction.bind(null, occupancyId)} className='grid gap-4 sm:grid-cols-2' resetOnSuccess={false}>
                         <Field label='Visitor name' name='visitorName'><input id='visitorName' name='visitorName' required autoComplete='off' /></Field>
                         <Field label='Visitor phone (optional)' name='visitorPhone'><PhoneInput name='visitorPhone' required={false} /></Field>
                         <Field label='Valid from' name='validFrom'><input id='validFrom' name='validFrom' type='datetime-local' defaultValue={from} required /></Field>
@@ -58,46 +62,54 @@ export default async function PassesPage ({ params }: { params: Promise<{ occupa
                                 <option value='multi'>Many times until it ends</option>
                             </select>
                         </Field>
-                        <div className='self-end'><SubmitButton className='w-full'>Create pass</SubmitButton></div>
+                        <div className='flex items-end'><SubmitButton className='w-full py-3'>Create pass</SubmitButton></div>
                     </ActionForm>
-                    <p className='mt-2 text-xs text-slate-500'>Times are Nigerian time (WAT).</p>
-                </section>
+                    <p className='mt-3 text-xs text-slate-500'>Times are Nigerian time (WAT).</p>
+                </SectionCard>
 
-                <section className='card'>
-                    <h2 className='font-semibold'>Your passes</h2>
-                    {passes.length === 0 && <p className='mt-2 text-sm text-slate-600'>No passes yet.</p>}
-                    <ul className='mt-2 divide-y divide-slate-100'>
-                        {passes.map(p => {
-                            const state = passState(p, now)
-                            return (
-                                <li key={p.id} className='flex flex-wrap items-center justify-between gap-2 py-3'>
-                                    <Link href={`/home/${occupancyId}/passes/${p.id}`} className='min-w-0'>
-                                        <p className='font-medium'>{p.visitorName} <span className={`ml-1 text-xs ${state === 'active' ? 'text-brand-700' : 'text-slate-500'}`}>{STATE_LABEL[state]}</span></p>
-                                        <p className='text-sm text-slate-600'><span className='font-mono'>{p.code}</span> · {formatDateTime(p.validFrom)} to {formatDateTime(p.validUntil)}</p>
-                                    </Link>
-                                    {(state === 'active' || state === 'not_yet_valid') && (
-                                        <ActionForm action={cancelPassAction.bind(null, occupancyId, p.id)} confirm={`Cancel the pass for ${p.visitorName}?`}>
-                                            <button className='text-sm text-red-700 underline'>Cancel</button>
-                                        </ActionForm>
-                                    )}
-                                </li>
-                            )
-                        })}
-                    </ul>
-                </section>
+                <SectionCard title='Your passes' icon={Ticket}>
+                    {passes.length === 0
+                        ? <EmptyState icon={Ticket} title='No passes yet'>Create one above for your next visitor.</EmptyState>
+                        : (
+                            <ul className='-mx-2 divide-y divide-slate-100'>
+                                {passes.map(p => {
+                                    const state = passState(p, now)
+                                    return (
+                                        <li key={p.id} className='flex flex-wrap items-center justify-between gap-2 px-2 py-3'>
+                                            <Link href={`/home/${occupancyId}/passes/${p.id}`} className='flex min-w-0 flex-1 items-center gap-3 rounded-lg'>
+                                                <span className='rounded-lg bg-brand-50 px-2.5 py-1.5 font-mono font-bold tracking-wider text-brand-800'>{p.code}</span>
+                                                <span className='min-w-0'>
+                                                    <span className='flex flex-wrap items-center gap-2 font-semibold'>{p.visitorName} <Badge tone={STATE[state].tone}>{STATE[state].label}</Badge></span>
+                                                    <span className='block text-sm text-slate-500'>{formatDateTime(p.validFrom)} to {formatDateTime(p.validUntil)}</span>
+                                                </span>
+                                                <ChevronRight className='ml-auto h-5 w-5 shrink-0 text-slate-400' aria-hidden />
+                                            </Link>
+                                            {(state === 'active' || state === 'not_yet_valid') && (
+                                                <ActionForm action={cancelPassAction.bind(null, occupancyId, p.id)} confirm={`Cancel the pass for ${p.visitorName}?`}>
+                                                    <button className='text-sm font-medium text-red-600 hover:underline'>Cancel</button>
+                                                </ActionForm>
+                                            )}
+                                        </li>
+                                    )
+                                })}
+                            </ul>
+                        )}
+                </SectionCard>
 
-                <section className='card'>
-                    <h2 className='font-semibold'>Recent visitors</h2>
-                    {visits.length === 0 && <p className='mt-2 text-sm text-slate-600'>No visitors yet.</p>}
-                    <ul className='mt-2 space-y-1 text-sm'>
+                <SectionCard title='Recent visitors' icon={Clock}>
+                    {visits.length === 0 && <p className='text-sm text-slate-500'>No visitors yet.</p>}
+                    <ul className='space-y-2 text-sm'>
                         {visits.map(v => (
-                            <li key={v.id}>
-                                <span className='font-medium'>{v.visitorName}</span> · {visitStatusLabel(v.status)}
-                                {v.checkedInAt ? ` · in ${formatDateTime(v.checkedInAt)}` : ''}{v.checkedOutAt ? ` · out ${formatDateTime(v.checkedOutAt)}` : ''}
+                            <li key={v.id} className='flex flex-wrap items-center gap-2'>
+                                <span className='font-semibold'>{v.visitorName}</span>
+                                <Badge tone={VISIT_STATUS_TONE[v.status]}>{visitStatusLabel(v.status)}</Badge>
+                                <span className='text-slate-500'>
+                                    {v.checkedInAt ? `in ${formatDateTime(v.checkedInAt)}` : formatDateTime(v.createdAt)}{v.checkedOutAt ? ` · out ${formatDateTime(v.checkedOutAt)}` : ''}
+                                </span>
                             </li>
                         ))}
                     </ul>
-                </section>
+                </SectionCard>
             </main>
         </>
     )

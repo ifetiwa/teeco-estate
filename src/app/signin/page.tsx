@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 
 import { ActionForm, Field, SubmitButton } from '@/components/ActionForm'
-import { Logo } from '@/components/Logo'
+import { AuthShell } from '@/components/AuthShell'
 import { PhoneInput } from '@/components/PhoneInput'
 import { getCurrentUser } from '@/lib/auth/current'
 
@@ -14,17 +14,17 @@ export default async function SignInPage ({ searchParams }: { searchParams: Prom
     const { next } = await searchParams
     if (await getCurrentUser()) redirect(next || '/app')
     return (
-        <main className='mx-auto max-w-sm px-4 py-10'>
-            <Logo />
-            <h1 className='mt-8 text-2xl font-semibold'>Sign in</h1>
-            <p className='mt-1 text-slate-600'>We will text a 6-digit code to your phone.</p>
-            <ActionForm action={requestCodeAction} className='mt-6 flex flex-col gap-4' resetOnSuccess={false}>
+        <AuthShell>
+            <h1 className='text-3xl font-bold'>Sign in</h1>
+            <p className='mt-2 text-slate-600'>We will text a 6-digit code to your phone.</p>
+            <ActionForm action={requestCodeAction} className='mt-8 flex flex-col gap-5' resetOnSuccess={false}>
                 <input type='hidden' name='next' value={next ?? ''} />
                 <Field label='Phone number' name='phone'>
                     <PhoneInput name='phone' autoFocus />
                 </Field>
-                <SubmitButton>Send code</SubmitButton>
+                <SubmitButton className='w-full py-3 text-base'>Send code</SubmitButton>
             </ActionForm>
-        </main>
+            <p className='mt-6 text-xs text-slate-500'>New here? Sign in with your phone, then use the join code from your estate office.</p>
+        </AuthShell>
     )
 }

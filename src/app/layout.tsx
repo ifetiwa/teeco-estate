@@ -1,10 +1,13 @@
 import type { Metadata, Viewport } from 'next'
+import { Inter } from 'next/font/google'
 import type { ReactNode } from 'react'
 
 import { Footer } from '@/components/Footer'
 import { BRAND } from '@/config/brand'
 
 import './globals.css'
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
 export const metadata: Metadata = {
     title: { default: BRAND.productName, template: `%s · ${BRAND.productName}` },
@@ -20,8 +23,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout ({ children }: { children: ReactNode }) {
     return (
-        <html lang='en-NG'>
-            <body className='flex min-h-screen flex-col bg-slate-50 text-slate-900 antialiased'>
+        <html lang='en-NG' className={inter.variable}>
+            <body className='flex min-h-screen flex-col antialiased'>
                 <div className='flex-1'>{children}</div>
                 <Footer />
             </body>

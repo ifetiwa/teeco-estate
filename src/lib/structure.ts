@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { withDbContext } from '@/db'
+import { inOrder, withDbContext } from '@/db'
 import { occupancies, unitHelpers, unitType, units, vehicles, zoneKind, zones } from '@/db/schema'
 import { type Actor, requireCapability } from '@/lib/access'
 import { AppError, NotFoundError, isUniqueViolation } from '@/lib/errors'
@@ -121,7 +121,7 @@ export async function getUnitDetail (actor: Actor, estateId: string, unitId: str
             .innerJoin(zones, eq(zones.id, units.zoneId))
             .where(and(eq(units.id, unitId), eq(units.estateId, estateId)))
         if (!unit) throw new NotFoundError('Unit')
-        const [occ, veh, helpers] = await Promise.all([
+        const [occ, veh, helpers] = await inOrder([
             tx.select().from(occupancies).where(eq(occupancies.unitId, unitId)).orderBy(asc(occupancies.createdAt)),
             tx.select().from(vehicles).where(and(eq(vehicles.unitId, unitId), eq(vehicles.isActive, true))).orderBy(asc(vehicles.createdAt)),
             tx.select().from(unitHelpers).where(and(eq(unitHelpers.unitId, unitId), eq(unitHelpers.isActive, true))).orderBy(asc(unitHelpers.createdAt)),

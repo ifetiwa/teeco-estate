@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { type Queryable, getDb, withDbContext } from '@/db'
+import { type Queryable, getDb, inOrder, withDbContext } from '@/db'
 import { estates, occupancies, occupantRelation, unitHelpers, units, users, vehicles, zones } from '@/db/schema'
 import { type Actor, getEstateAccess, requireCapability } from '@/lib/access'
 import { recordAudit } from '@/lib/audit'
@@ -283,7 +283,7 @@ export async function getMyHome (actor: Actor, occupancyId: string) {
         const [row] = await tx.select({ unit: units, zone: zones, estateName: estates.name }).from(units)
             .innerJoin(zones, eq(zones.id, units.zoneId)).innerJoin(estates, eq(estates.id, units.estateId))
             .where(eq(units.id, own.unitId))
-        const [household, veh, helpers] = await Promise.all([
+        const [household, veh, helpers] = await inOrder([
             tx.select({ id: occupancies.id, name: occupancies.name, relation: occupancies.relation, isPrimary: occupancies.isPrimary })
                 .from(occupancies).where(and(eq(occupancies.unitId, own.unitId), eq(occupancies.status, 'active'))).orderBy(asc(occupancies.name)),
             tx.select().from(vehicles).where(and(eq(vehicles.unitId, own.unitId), eq(vehicles.isActive, true))).orderBy(asc(vehicles.createdAt)),
