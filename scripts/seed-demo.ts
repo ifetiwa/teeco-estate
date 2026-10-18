@@ -19,7 +19,7 @@ import type { Actor } from '../src/lib/access'
 import { setEstateLocation } from '../src/lib/emergency'
 import { createEstate, ensureUserByPhone } from '../src/lib/estates'
 import { toLagosInputValue } from '../src/lib/format'
-import { recordPayment } from '../src/lib/levies'
+import { recordPayment, sendPaymentReminders, updateChargeSettings } from '../src/lib/levies'
 import { requireNigerianPhone } from '../src/lib/phone'
 import { addResident, addVehicle, addHelper, registerAsResident } from '../src/lib/residents'
 import { addStaff } from '../src/lib/staff'
@@ -200,25 +200,35 @@ async function main () {
         await logWalkIn(guard, estate.id, { unitId: yourUnit, visitorName: 'Mr Peter (plumber)', visitorPhone: '07000088888', purpose: 'Fix kitchen sink', gate: 1 })
 
         // Payments: monthly security levy and a yearly service charge, paid by most (not all) houses
-        const months = ['July 2026', 'August 2026', 'September 2026', 'October 2026']
+        const months = ['2026-07', '2026-08', '2026-09', '2026-10']
         const finance = await actorOf(index === 0 ? PERSONAS.finance.phone : ownerPhone)
         const levy = [10_000, 15_000, 20_000][index]
+        const serviceCharge = [120_000, 150_000, 250_000][index]
+        await updateChargeSettings(you, estate.id, {
+            securityAmount: String(levy), securityFrequency: 'monthly', serviceAmount: String(serviceCharge), serviceFrequency: 'yearly',
+            showEstateTotalsToResidents: index === 0 ? 'on' : '',
+        })
         for (const [unitId] of occupiedUnits) {
             const paysUpTo = rand() < 0.15 ? 0 : 1 + Math.floor(rand() * months.length)
             for (let m = 0; m < paysUpTo; m++) {
                 await recordPayment(finance, estate.id, {
-                    unitId, kind: 'security_levy', amount: String(levy), period: months[m],
+                    unitId, kind: 'security_levy', amount: String(levy), coversFrom: months[m],
                     paidOn: `2026-${String(7 + m).padStart(2, '0')}-0${1 + Math.floor(rand() * 8)}`,
                     method: pick(['bank_transfer', 'bank_transfer', 'cash', 'pos'] as const), reference: rand() < 0.7 ? `TRF${100000 + Math.floor(rand() * 899999)}` : undefined,
                 })
             }
             if (rand() < 0.6) {
+                // Most pay the full year; some pay half
+                const half = rand() < 0.25
                 await recordPayment(finance, estate.id, {
-                    unitId, kind: 'service_charge', amount: String([120_000, 150_000, 250_000][index]), period: '2026',
+                    unitId, kind: 'service_charge', amount: String(half ? serviceCharge / 2 : serviceCharge), coversFrom: '2026-01', coversTo: '2026-12',
                     paidOn: `2026-0${1 + Math.floor(rand() * 6)}-1${Math.floor(rand() * 9)}`, method: 'bank_transfer', reference: `TRF${100000 + Math.floor(rand() * 899999)}`,
                 })
             }
         }
+
+        // Last month's security levy reminders already went out
+        await sendPaymentReminders(finance, estate.id, { kind: 'security_levy', periodKey: '2026-09' })
 
         // Rules last, so the curfew doesn't block the backfilled history
         await updateVisitorRules(you, estate.id, { maxPassesPerResidentPerDay: 10, curfewEnabled: index === 1 ? 'on' : '', curfewStart: '23:30', curfewEnd: '05:00' })

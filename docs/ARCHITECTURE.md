@@ -85,12 +85,23 @@ shows a banner, and every page view is written to `audit_logs`. The estate admin
 ## Payment records
 
 - `levy_payments`: a payment received from a unit for the **security levy** or the **estate service charge**, recorded
-  by a finance officer or estate admin (`finance.manage`). Amount in kobo (check constraint: positive), what it covers
-  (`period`, free text such as "October 2026"), date paid, method and reference. Payments are never deleted: a mistake
-  is voided with a reason, stays in the history and drops out of totals. Recording and voiding are audit-logged.
-- Staff see totals per charge, a filterable list and an amount-paid-per-house view (`/estate/:id/payments`).
-  Residents see their own house's payments on their home page and get an in-app notification for each one recorded.
-- This is a record of money received outside the app. Invoices, arrears and online payment (Paystack) come with Build 6.
+  by a finance officer or estate admin (`finance.manage`). Amount in kobo (check constraint: positive), the months it
+  covers (`covers_from`..`covers_to`, first-of-month dates; a label such as "October 2026", "Q4 2026" or "2026" is
+  derived), date paid, method and reference. Payments are never deleted: a mistake is voided with a reason, stays in
+  the history and drops out of totals. Recording and voiding are audit-logged.
+- Each estate sets, in `estates.settings.levies.charges`, the amount each house pays per charge and how often
+  (monthly, quarterly or yearly). Period maths lives in `src/lib/periods.ts`; a payment covering several months is
+  spread evenly over them, so a yearly payment counts a twelfth towards each month.
+- **Who has paid** (`paymentStatus`): for one charge and period, every active house is *paid*, *part paid*, *not paid*
+  or *no residents*, with its current residents' phones (call, SMS and WhatsApp links) and when it was last reminded.
+  With no amount set, any payment counts as paid.
+- **Reminders** (`sendPaymentReminders`, `payment_reminders`): an SMS to every current resident and an in-app
+  notification to those with accounts, for one house or all houses that owe. A house isn't reminded about the same
+  charge and period twice within 20 hours. Logged and audit-logged.
+- **Totals** by year and month of the date paid: per house for its residents (`/home/:id/payments`) and for the
+  estate (staff, Payments → Monthly & yearly totals). Residents see the estate's totals only if the estate turns on
+  `levies.showEstateTotalsToResidents`; they never see other houses' payments.
+- This is a record of money received outside the app. Invoices and online payment (Paystack) come with Build 6.
 
 ## Emergencies (distress button)
 

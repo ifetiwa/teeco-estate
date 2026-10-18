@@ -17,6 +17,13 @@ export const estateSettingsSchema = z.object({
         defaultPassValidityHours: z.number().int().min(1).max(24 * 31),
     }),
     levies: z.object({
+        // What each house is expected to pay. 0 = not set (status then only shows paid or not paid).
+        charges: z.object({
+            security_levy: z.object({ amountKobo: z.number().int().min(0), frequency: z.enum(['monthly', 'quarterly', 'yearly']) }),
+            service_charge: z.object({ amountKobo: z.number().int().min(0), frequency: z.enum(['monthly', 'quarterly', 'yearly']) }),
+        }),
+        /** Residents can see the estate's total collections per month and year (not other houses' payments). */
+        showEstateTotalsToResidents: z.boolean(),
         reminderDaysBeforeDue: z.array(z.number().int().min(0).max(60)),
         reminderDaysAfterDue: z.array(z.number().int().min(0).max(180)),
         lateFee: z.object({
@@ -48,6 +55,11 @@ export const PLATFORM_DEFAULTS: EstateSettings = {
         defaultPassValidityHours: 12,
     },
     levies: {
+        charges: {
+            security_levy: { amountKobo: 0, frequency: 'monthly' },
+            service_charge: { amountKobo: 0, frequency: 'yearly' },
+        },
+        showEstateTotalsToResidents: false,
         reminderDaysBeforeDue: [7, 1],
         reminderDaysAfterDue: [1, 7, 30],
         lateFee: { enabled: false, type: 'percent', value: 0, graceDays: 14 },

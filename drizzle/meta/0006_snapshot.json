@@ -1,6 +1,6 @@
 {
-  "id": "c794b505-b1df-4812-b915-d6f5a0597789",
-  "prevId": "6ed72370-fa63-43a2-8641-47e57e3852c9",
+  "id": "6c29891a-2c75-4df1-8aa7-809609cafc75",
+  "prevId": "433c1b7d-f0db-4302-bb54-b10f3f0406de",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -696,6 +696,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "covers_from": {
+          "name": "covers_from",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "covers_to": {
+          "name": "covers_to",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
         "period": {
           "name": "period",
           "type": "text",
@@ -778,6 +790,39 @@
             },
             {
               "expression": "paid_on",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "levy_payments_estate_covers_idx": {
+          "name": "levy_payments_estate_covers_idx",
+          "columns": [
+            {
+              "expression": "estate_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "covers_from",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "covers_to",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1435,6 +1480,164 @@
         }
       },
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.payment_reminders": {
+      "name": "payment_reminders",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "estate_id": {
+          "name": "estate_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "charge_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period_key": {
+          "name": "period_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outstanding_kobo": {
+          "name": "outstanding_kobo",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sent_by": {
+          "name": "sent_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recipients": {
+          "name": "recipients",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "payment_reminders_lookup_idx": {
+          "name": "payment_reminders_lookup_idx",
+          "columns": [
+            {
+              "expression": "estate_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "period_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "unit_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "payment_reminders_estate_id_estates_id_fk": {
+          "name": "payment_reminders_estate_id_estates_id_fk",
+          "tableFrom": "payment_reminders",
+          "columnsFrom": [
+            "estate_id"
+          ],
+          "tableTo": "estates",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "payment_reminders_unit_id_units_id_fk": {
+          "name": "payment_reminders_unit_id_units_id_fk",
+          "tableFrom": "payment_reminders",
+          "columnsFrom": [
+            "unit_id"
+          ],
+          "tableTo": "units",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "payment_reminders_sent_by_users_id_fk": {
+          "name": "payment_reminders_sent_by_users_id_fk",
+          "tableFrom": "payment_reminders",
+          "columnsFrom": [
+            "sent_by"
+          ],
+          "tableTo": "users",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "set null"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

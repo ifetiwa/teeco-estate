@@ -281,14 +281,20 @@ export const notifications = pgTable('notifications', {
 export const chargeKind = pgEnum('charge_kind', ['security_levy', 'service_charge'])
 export const paymentMethod = pgEnum('payment_method', ['bank_transfer', 'cash', 'pos', 'online', 'other'])
 
-/** A payment received from a unit, recorded by finance staff. Never deleted: mistakes are voided with a reason. */
+/**
+ * A payment received from a unit, recorded by finance staff. Never deleted: mistakes are voided with a reason.
+ * `covers_from`..`covers_to` are the first days of the first and last month the payment is for (inclusive), so a
+ * payment for October 2026 has both set to 2026-10-01 and a yearly service charge runs from January to December.
+ */
 export const levyPayments = pgTable('levy_payments', {
     id: id(),
     estateId: estateId(),
     unitId: uuid('unit_id').notNull().references(() => units.id, { onDelete: 'restrict' }),
     kind: chargeKind('kind').notNull(),
     amountKobo: bigint('amount_kobo', { mode: 'number' }).notNull(),
-    period: text('period').notNull(), // what the payment covers, e.g. "October 2026" or "2026"
+    coversFrom: date('covers_from').notNull(),
+    coversTo: date('covers_to').notNull(),
+    period: text('period').notNull(), // label derived from the covered months, e.g. "October 2026" or "2026"
     paidOn: date('paid_on').notNull(),
     method: paymentMethod('method').notNull().default('bank_transfer'),
     reference: text('reference'), // bank or receipt reference
@@ -301,8 +307,23 @@ export const levyPayments = pgTable('levy_payments', {
     createdAt: createdAt(),
 }, (t) => [
     index('levy_payments_estate_paid_idx').on(t.estateId, t.paidOn),
+    index('levy_payments_estate_covers_idx').on(t.estateId, t.kind, t.coversFrom, t.coversTo),
     index('levy_payments_unit_idx').on(t.unitId, t.paidOn),
 ])
+
+/** Payment reminders sent to a house, so staff can see who was chased and the same house isn't texted twice a day. */
+export const paymentReminders = pgTable('payment_reminders', {
+    id: id(),
+    estateId: estateId(),
+    unitId: uuid('unit_id').notNull().references(() => units.id, { onDelete: 'cascade' }),
+    kind: chargeKind('kind').notNull(),
+    periodKey: text('period_key').notNull(), // e.g. 2026-10, 2026-Q4 or 2026
+    outstandingKobo: bigint('outstanding_kobo', { mode: 'number' }).notNull().default(0),
+    message: text('message'),
+    sentBy: uuid('sent_by').references(() => users.id, { onDelete: 'set null' }),
+    recipients: integer('recipients').notNull().default(0),
+    createdAt: createdAt(),
+}, (t) => [index('payment_reminders_lookup_idx').on(t.estateId, t.kind, t.periodKey, t.unitId, t.createdAt)])
 
 // ---------- Emergencies ----------
 

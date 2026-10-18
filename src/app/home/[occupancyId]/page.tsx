@@ -14,7 +14,8 @@ import { requireUser } from '@/lib/auth/current'
 import { getOpenAlertForUnit } from '@/lib/emergency'
 import { NotFoundError } from '@/lib/errors'
 import { formatDate, formatNaira } from '@/lib/format'
-import { CHARGE_KIND_LABEL, PAYMENT_METHOD_LABEL, listUnitPayments } from '@/lib/levies'
+import { CHARGE_KIND_LABEL, PAYMENT_STATE_LABEL, listUnitPayments } from '@/lib/levies'
+import { lagosMonth, yearOf } from '@/lib/periods'
 import { formatNigerianPhone } from '@/lib/phone'
 import { getMyHome } from '@/lib/residents'
 
@@ -35,6 +36,7 @@ export default async function MyHomePage ({ params }: { params: Promise<{ occupa
         throw e
     }
     const estateId = home.occupancy.estateId
+    const thisYear = yearOf(lagosMonth())
     const [openAlert, payments] = await Promise.all([
         getOpenAlertForUnit(actorFromUser(user), estateId, home.unit.id),
         listUnitPayments(actorFromUser(user), estateId, home.unit.id),
@@ -57,15 +59,22 @@ export default async function MyHomePage ({ params }: { params: Promise<{ occupa
 
                 <ActionTile href={`/home/${occupancyId}/passes`} icon={QrCode} title='Visitor passes' description='Create a gate code for a visitor and share it' tone='accent' />
 
-                <SectionCard title='Payments' icon={Receipt} description='Security levy and service charge payments recorded by your estate office.'>
+                <SectionCard title='Payments' icon={Receipt}
+                    actions={<Link href={`/home/${occupancyId}/payments`} className='text-sm font-medium text-brand-700 hover:underline'>Totals by month & year</Link>}>
                     <div className='grid grid-cols-2 gap-3'>
-                        <div className='rounded-xl bg-slate-50 p-3'><p className='text-xs font-medium text-slate-500'>Security levy paid</p><p className='text-lg font-bold'>{formatNaira(payments.securityKobo)}</p></div>
-                        <div className='rounded-xl bg-slate-50 p-3'><p className='text-xs font-medium text-slate-500'>Service charge paid</p><p className='text-lg font-bold'>{formatNaira(payments.serviceKobo)}</p></div>
+                        {payments.current.map(c => (
+                            <Link key={c.kind} href={`/home/${occupancyId}/payments`} className='rounded-xl bg-slate-50 p-3 hover:bg-slate-100'>
+                                <p className='text-xs font-medium text-slate-500'>{CHARGE_KIND_LABEL[c.kind]} · {c.period.label}</p>
+                                <p className='text-lg font-bold'>{formatNaira(c.paidKobo)}</p>
+                                <Badge tone={c.state === 'paid' ? 'green' : c.state === 'part_paid' ? 'amber' : 'red'}>{PAYMENT_STATE_LABEL[c.state]}{c.outstandingKobo > 0 && c.state !== 'paid' ? `: ${formatNaira(c.outstandingKobo)} to pay` : ''}</Badge>
+                            </Link>
+                        ))}
                     </div>
-                    <ul className='mt-3 divide-y divide-slate-100'>
-                        {payments.rows.map(p => (
-                            <li key={p.id} className={`flex items-center justify-between gap-3 py-2 text-sm ${p.voidedAt ? 'text-slate-400 line-through' : ''}`}>
-                                <span><span className='font-medium'>{CHARGE_KIND_LABEL[p.kind]}</span> · {p.period}<span className='block text-xs text-slate-500'>{formatDate(new Date(p.paidOn))} · {PAYMENT_METHOD_LABEL[p.method]}{p.reference ? ` · Ref ${p.reference}` : ''}</span></span>
+                    <p className='mt-3 text-sm text-slate-600'>Paid {thisYear}: <span className='font-semibold'>{formatNaira(payments.byYear.find(y => y.year === thisYear)?.totalKobo ?? 0)}</span> · All time: <span className='font-semibold'>{formatNaira(payments.securityKobo + payments.serviceKobo)}</span></p>
+                    <ul className='mt-2 divide-y divide-slate-100'>
+                        {payments.rows.filter(p => !p.voidedAt).slice(0, 3).map(p => (
+                            <li key={p.id} className='flex items-center justify-between gap-3 py-2 text-sm'>
+                                <span><span className='font-medium'>{CHARGE_KIND_LABEL[p.kind]}</span> · {p.period}<span className='block text-xs text-slate-500'>Paid {formatDate(new Date(p.paidOn))}</span></span>
                                 <span className='font-semibold'>{formatNaira(p.amountKobo)}</span>
                             </li>
                         ))}

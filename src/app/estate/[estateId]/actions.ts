@@ -7,7 +7,7 @@ import { type ActionState, formObject, runAction } from '@/lib/actions'
 import { requireUser } from '@/lib/auth/current'
 import { acknowledgeDistress, resolveDistress, setEstateLocation } from '@/lib/emergency'
 import { regenerateJoinCode, setEstateLogo, updateEstateDetails } from '@/lib/estates'
-import { CHARGE_KIND_LABEL, recordPayment, voidPayment } from '@/lib/levies'
+import { CHARGE_KIND_LABEL, recordPayment, sendPaymentReminders, updateChargeSettings, voidPayment } from '@/lib/levies'
 import { formatNaira } from '@/lib/format'
 import {
     addHelper, addResident, addVehicle, approveResident, moveOutResident, rejectResident, removeHelper, removeVehicle, setPrimaryContact,
@@ -173,8 +173,31 @@ export async function unblockVisitorAction (estateId: string, blockId: string, _
 export async function recordPaymentAction (estateId: string, _: ActionState, formData: FormData) {
     return withActor(estateId, async (actor) => {
         const p = await recordPayment(actor, estateId, formObject(formData) as never)
-        return `${formatNaira(p.amountKobo)} ${CHARGE_KIND_LABEL[p.kind].toLowerCase()} recorded.`
+        return `${formatNaira(p.amountKobo)} ${CHARGE_KIND_LABEL[p.kind].toLowerCase()} for ${p.period} recorded.`
     })
+}
+
+export async function updateChargeSettingsAction (estateId: string, _: ActionState, formData: FormData) {
+    return withActor(estateId, async (actor) => {
+        await updateChargeSettings(actor, estateId, formObject(formData) as never)
+        return 'Charges saved.'
+    })
+}
+
+function reminderResult (r: { reminded: number, skippedPaid: number, skippedRecent: number, recipients: number }) {
+    if (r.reminded === 0) return r.skippedRecent > 0 ? 'Already reminded in the last 20 hours. Nobody was texted again.' : 'Nobody to remind: every house has paid.'
+    const skipped = r.skippedRecent ? ` ${r.skippedRecent} reminded recently were skipped.` : ''
+    return `Reminder sent to ${r.reminded} house${r.reminded === 1 ? '' : 's'} (${r.recipients} ${r.recipients === 1 ? 'person' : 'people'}).${skipped}`
+}
+
+export async function remindAllAction (estateId: string, kind: string, periodKey: string, _: ActionState, formData: FormData) {
+    return withActor(estateId, async (actor) => reminderResult(await sendPaymentReminders(actor, estateId, {
+        kind: kind as never, periodKey, message: String(formData.get('message') ?? ''),
+    })))
+}
+
+export async function remindHouseAction (estateId: string, kind: string, periodKey: string, unitId: string, _: ActionState) {
+    return withActor(estateId, async (actor) => reminderResult(await sendPaymentReminders(actor, estateId, { kind: kind as never, periodKey, unitIds: [unitId] })))
 }
 
 export async function voidPaymentAction (estateId: string, paymentId: string, _: ActionState, formData: FormData) {

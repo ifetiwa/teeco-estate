@@ -27,6 +27,8 @@ CREATE TABLE "levy_payments" (
 	"unit_id" uuid NOT NULL,
 	"kind" charge_kind NOT NULL,
 	"amount_kobo" bigint NOT NULL,
+	"covers_from" date NOT NULL,
+	"covers_to" date NOT NULL,
 	"period" text NOT NULL,
 	"paid_on" date NOT NULL,
 	"method" "payment_method" DEFAULT 'bank_transfer' NOT NULL,
@@ -37,6 +39,19 @@ CREATE TABLE "levy_payments" (
 	"voided_at" timestamp with time zone,
 	"voided_by" uuid,
 	"void_reason" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "payment_reminders" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"estate_id" uuid NOT NULL,
+	"unit_id" uuid NOT NULL,
+	"kind" charge_kind NOT NULL,
+	"period_key" text NOT NULL,
+	"outstanding_kobo" bigint DEFAULT 0 NOT NULL,
+	"message" text,
+	"sent_by" uuid,
+	"recipients" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -64,7 +79,12 @@ ALTER TABLE "levy_payments" ADD CONSTRAINT "levy_payments_estate_id_estates_id_f
 ALTER TABLE "levy_payments" ADD CONSTRAINT "levy_payments_unit_id_units_id_fk" FOREIGN KEY ("unit_id") REFERENCES "public"."units"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "levy_payments" ADD CONSTRAINT "levy_payments_recorded_by_users_id_fk" FOREIGN KEY ("recorded_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "levy_payments" ADD CONSTRAINT "levy_payments_voided_by_users_id_fk" FOREIGN KEY ("voided_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "payment_reminders" ADD CONSTRAINT "payment_reminders_estate_id_estates_id_fk" FOREIGN KEY ("estate_id") REFERENCES "public"."estates"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "payment_reminders" ADD CONSTRAINT "payment_reminders_unit_id_units_id_fk" FOREIGN KEY ("unit_id") REFERENCES "public"."units"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "payment_reminders" ADD CONSTRAINT "payment_reminders_sent_by_users_id_fk" FOREIGN KEY ("sent_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "distress_alerts_estate_created_idx" ON "distress_alerts" USING btree ("estate_id","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "distress_alerts_one_open_per_unit" ON "distress_alerts" USING btree ("unit_id") WHERE "distress_alerts"."status" in ('active', 'acknowledged');--> statement-breakpoint
 CREATE INDEX "levy_payments_estate_paid_idx" ON "levy_payments" USING btree ("estate_id","paid_on");--> statement-breakpoint
-CREATE INDEX "levy_payments_unit_idx" ON "levy_payments" USING btree ("unit_id","paid_on");
+CREATE INDEX "levy_payments_estate_covers_idx" ON "levy_payments" USING btree ("estate_id","kind","covers_from","covers_to");--> statement-breakpoint
+CREATE INDEX "levy_payments_unit_idx" ON "levy_payments" USING btree ("unit_id","paid_on");--> statement-breakpoint
+CREATE INDEX "payment_reminders_lookup_idx" ON "payment_reminders" USING btree ("estate_id","kind","period_key","unit_id","created_at");
