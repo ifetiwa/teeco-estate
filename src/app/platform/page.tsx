@@ -1,4 +1,4 @@
-import { Building2, Eye, House, PlusCircle, Users } from 'lucide-react'
+import { Building2, Eye, House, PlusCircle, Siren, Users } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -9,10 +9,11 @@ import { PhoneInput } from '@/components/PhoneInput'
 import { Badge, PageHeader, SectionCard, StatCard } from '@/components/ui'
 import { actorFromUser } from '@/lib/access'
 import { requireUser } from '@/lib/auth/current'
+import { formatDialNumber, listPoliceStations } from '@/lib/emergency'
 import { listAllEstates, listMyEstates } from '@/lib/estates'
 import { formatDate } from '@/lib/format'
 
-import { createEstateAction, openSupportAccessAction } from './actions'
+import { addPoliceStationAction, createEstateAction, openSupportAccessAction, setPoliceStationActiveAction } from './actions'
 
 export const metadata: Metadata = { title: 'Platform' }
 
@@ -20,7 +21,7 @@ export default async function PlatformPage () {
     const user = await requireUser()
     if (!user.isPlatformAdmin) notFound()
     const actor = actorFromUser(user)
-    const [estates, mine] = await Promise.all([listAllEstates(actor), listMyEstates(actor)])
+    const [estates, mine, stations] = await Promise.all([listAllEstates(actor), listMyEstates(actor), listPoliceStations(actor)])
     const managedIds = new Set(mine.filter(m => m.staffRoles.length > 0).map(m => m.id))
     const totals = estates.reduce((t, e) => ({ units: t.units + e.unitCount, residents: t.residents + e.residentCount }), { units: 0, residents: 0 })
 
@@ -86,6 +87,48 @@ export default async function PlatformPage () {
                             <Field label='Estate admin / chairman name' name='adminName'><input id='adminName' name='adminName' required /></Field>
                             <Field label='Estate admin phone' name='adminPhone'><PhoneInput name='adminPhone' /></Field>
                             <SubmitButton className='w-full py-3'>Create estate</SubmitButton>
+                        </ActionForm>
+                    </SectionCard>
+                </div>
+
+                <div className='mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_380px]'>
+                    <section>
+                        <h2 className='mb-1 flex items-center gap-2 text-lg font-semibold'><Siren className='h-5 w-5 text-red-600' aria-hidden /> Police stations</h2>
+                        <p className='mb-3 text-sm text-slate-600'>When a resident presses the emergency button, the three active stations nearest to them are shown to call, followed by 112 and 199. Only add numbers you have confirmed with the station.</p>
+                        <div className='table-wrap'>
+                            <table className='data-table'>
+                                <thead><tr><th>Station</th><th>Phone</th><th>Position</th><th /></tr></thead>
+                                <tbody>
+                                    {stations.map(st => (
+                                        <tr key={st.id} className={st.isActive ? '' : 'text-slate-400'}>
+                                            <td><span className='font-semibold'>{st.name}</span><span className='block text-xs text-slate-500'>{[st.area, st.address].filter(Boolean).join(' · ')}</span></td>
+                                            <td className='font-mono text-sm whitespace-nowrap'>{formatDialNumber(st.phone)}{st.altPhone && <span className='block'>{formatDialNumber(st.altPhone)}</span>}</td>
+                                            <td className='text-xs whitespace-nowrap'>{st.latitude.toFixed(4)}, {st.longitude.toFixed(4)}</td>
+                                            <td>
+                                                <ActionForm action={setPoliceStationActiveAction.bind(null, st.id, !st.isActive)}>
+                                                    <button className='text-sm font-medium text-brand-700 hover:underline'>{st.isActive ? 'Hide' : 'Show'}</button>
+                                                </ActionForm>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {stations.length === 0 && <tr><td colSpan={4} className='text-slate-500'>No stations yet. Until you add some, alerts show only 112 and 199.</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <SectionCard title='Add a police station' icon={PlusCircle} className='h-fit'>
+                        <ActionForm action={addPoliceStationAction} className='flex flex-col gap-3'>
+                            <Field label='Station name' name='name'><input id='ps-name' name='name' placeholder='e.g. Lokogoma Police Division' required /></Field>
+                            <Field label='Area' name='area'><input id='ps-area' name='area' placeholder='e.g. Lokogoma' /></Field>
+                            <Field label='Address' name='address'><input id='ps-address' name='address' /></Field>
+                            <div className='grid grid-cols-2 gap-3'>
+                                <Field label='Phone' name='phone'><input id='ps-phone' name='phone' inputMode='tel' required /></Field>
+                                <Field label='Other phone' name='altPhone'><input id='ps-alt' name='altPhone' inputMode='tel' /></Field>
+                                <Field label='Latitude' name='latitude'><input id='ps-lat' name='latitude' inputMode='decimal' placeholder='9.0579' required /></Field>
+                                <Field label='Longitude' name='longitude'><input id='ps-lng' name='longitude' inputMode='decimal' placeholder='7.4951' required /></Field>
+                            </div>
+                            <SubmitButton>Add station</SubmitButton>
                         </ActionForm>
                     </SectionCard>
                 </div>

@@ -7,6 +7,7 @@ import { actorFromUser } from '@/lib/access'
 import { type ActionState, formObject, runAction, toActionError } from '@/lib/actions'
 import { requireUser } from '@/lib/auth/current'
 import { randomToken } from '@/lib/crypto'
+import { acknowledgeDistress, resolveDistress } from '@/lib/emergency'
 import { formatDateTime } from '@/lib/format'
 import { checkInApprovedWalkIn, checkInWithPass, checkOutVisit, denyPassEntry, logWalkIn, verifyGateCode } from '@/lib/visitors'
 
@@ -100,5 +101,23 @@ export async function checkOutAction (estateId: string, visitId: string, _: Acti
     return gateAction(estateId, async (actor) => {
         const v = await checkOutVisit(actor, estateId, visitId)
         return `${v.visitorName} checked out.`
+    })
+}
+
+export async function acknowledgeAlertAction (estateId: string, alertId: string, _: ActionState): Promise<ActionState> {
+    const user = await requireUser()
+    return runAction(async () => {
+        await acknowledgeDistress(actorFromUser(user), estateId, alertId)
+        revalidatePath(`/gate/${estateId}`)
+        return 'You are responding. The household has been told help is coming.'
+    })
+}
+
+export async function resolveAlertAction (estateId: string, alertId: string, _: ActionState, formData: FormData): Promise<ActionState> {
+    const user = await requireUser()
+    return runAction(async () => {
+        await resolveDistress(actorFromUser(user), estateId, alertId, String(formData.get('note') ?? ''), formData.get('falseAlarm') === 'on')
+        revalidatePath(`/gate/${estateId}`)
+        return 'Alert closed.'
     })
 }

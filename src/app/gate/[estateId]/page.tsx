@@ -3,14 +3,17 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { AppHeader } from '@/components/AppHeader'
+import { EmergencyPanel, type PanelAlert, toPanelAlert } from '@/components/EmergencyPanel'
 import { actorFromUser } from '@/lib/access'
 import { requireUser } from '@/lib/auth/current'
+import { listOpenAlerts } from '@/lib/emergency'
 import { getEstateForStaff } from '@/lib/estates'
 import { ForbiddenError, NotFoundError } from '@/lib/errors'
 import { formatTime } from '@/lib/format'
 import { listZonesWithUnits } from '@/lib/structure'
 import { getGateBoard } from '@/lib/visitors'
 
+import { acknowledgeAlertAction, resolveAlertAction } from './actions'
 import { type BoardRow, GateConsole } from './GateConsole'
 
 export const metadata: Metadata = { title: 'Gate' }
@@ -28,7 +31,13 @@ export default async function GatePage ({ params }: { params: Promise<{ estateId
         throw e
     }
     if (!access.capabilities.has('gate.operate')) notFound()
-    const [board, zones] = await Promise.all([getGateBoard(actor, estate.id), listZonesWithUnits(actor, estate.id)])
+    const canRespond = access.capabilities.has('emergency.respond')
+    const [board, zones, openAlerts] = await Promise.all([
+        getGateBoard(actor, estate.id),
+        listZonesWithUnits(actor, estate.id),
+        canRespond ? listOpenAlerts(actor, estate.id) : Promise.resolve([]),
+    ])
+    const alerts: PanelAlert[] = openAlerts.map(toPanelAlert)
     const toRow = (r: (typeof board.inside)[number]): BoardRow => ({
         id: r.visit.id,
         visitorName: r.visit.visitorName,
@@ -53,7 +62,8 @@ export default async function GatePage ({ params }: { params: Promise<{ estateId
                     {access.capabilities.has('estate.manage') && <Link href={`/estate/${estate.id}`} className='rounded-lg bg-white/15 px-3 py-2 text-sm font-semibold hover:bg-white/25'>Estate admin</Link>}
                 </div>
             </div>
-            <main className='mx-auto max-w-lg px-4 py-5'>
+            <main className='mx-auto max-w-lg space-y-5 px-4 py-5'>
+                <EmergencyPanel alerts={alerts} acknowledge={id => acknowledgeAlertAction.bind(null, estate.id, id)} resolve={id => resolveAlertAction.bind(null, estate.id, id)} />
                 <GateConsole
                     estateId={estate.id}
                     gateCount={board.gateCount}

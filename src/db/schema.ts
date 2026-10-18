@@ -1,6 +1,6 @@
 // Database schema. Every estate-owned table carries estate_id (see docs/ARCHITECTURE.md).
 import { sql } from 'drizzle-orm'
-import { boolean, date, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { bigint, boolean, date, doublePrecision, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 const id = () => uuid('id').primaryKey().defaultRandom()
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
@@ -52,6 +52,9 @@ export const estates = pgTable('estates', {
     contactEmail: text('contact_email'),
     logoPath: text('logo_path'),
     gateCount: integer('gate_count').notNull().default(1),
+    // Map position of the estate (WGS84). Used when a distress alert has no GPS fix, and to find nearby police.
+    latitude: doublePrecision('latitude'),
+    longitude: doublePrecision('longitude'),
     joinCode: text('join_code').notNull().unique(),
     settings: jsonb('settings').notNull().default({}), // overrides of PLATFORM_DEFAULTS
     status: estateStatus('status').notNull().default('trial'),
@@ -272,3 +275,74 @@ export const notifications = pgTable('notifications', {
     readAt: timestamp('read_at', { withTimezone: true }),
     createdAt: createdAt(),
 }, (t) => [index('notifications_user_created_idx').on(t.userId, t.createdAt)])
+
+// ---------- Levy and service charge payment records ----------
+
+export const chargeKind = pgEnum('charge_kind', ['security_levy', 'service_charge'])
+export const paymentMethod = pgEnum('payment_method', ['bank_transfer', 'cash', 'pos', 'online', 'other'])
+
+/** A payment received from a unit, recorded by finance staff. Never deleted: mistakes are voided with a reason. */
+export const levyPayments = pgTable('levy_payments', {
+    id: id(),
+    estateId: estateId(),
+    unitId: uuid('unit_id').notNull().references(() => units.id, { onDelete: 'restrict' }),
+    kind: chargeKind('kind').notNull(),
+    amountKobo: bigint('amount_kobo', { mode: 'number' }).notNull(),
+    period: text('period').notNull(), // what the payment covers, e.g. "October 2026" or "2026"
+    paidOn: date('paid_on').notNull(),
+    method: paymentMethod('method').notNull().default('bank_transfer'),
+    reference: text('reference'), // bank or receipt reference
+    payerName: text('payer_name'),
+    note: text('note'),
+    recordedBy: uuid('recorded_by').references(() => users.id, { onDelete: 'set null' }),
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidedBy: uuid('voided_by').references(() => users.id, { onDelete: 'set null' }),
+    voidReason: text('void_reason'),
+    createdAt: createdAt(),
+}, (t) => [
+    index('levy_payments_estate_paid_idx').on(t.estateId, t.paidOn),
+    index('levy_payments_unit_idx').on(t.unitId, t.paidOn),
+])
+
+// ---------- Emergencies ----------
+
+export const distressStatus = pgEnum('distress_status', ['active', 'acknowledged', 'resolved', 'false_alarm'])
+export const locationSource = pgEnum('location_source', ['gps', 'estate', 'none'])
+
+/** A resident's emergency (panic button) alert. */
+export const distressAlerts = pgTable('distress_alerts', {
+    id: id(),
+    estateId: estateId(),
+    unitId: uuid('unit_id').notNull().references(() => units.id, { onDelete: 'cascade' }),
+    raisedBy: uuid('raised_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    latitude: doublePrecision('latitude'),
+    longitude: doublePrecision('longitude'),
+    accuracyMeters: integer('accuracy_meters'),
+    locationSource: locationSource('location_source').notNull(),
+    status: distressStatus('status').notNull().default('active'),
+    notifiedCount: integer('notified_count').notNull().default(0),
+    acknowledgedBy: uuid('acknowledged_by').references(() => users.id, { onDelete: 'set null' }),
+    acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
+    closedBy: uuid('closed_by').references(() => users.id, { onDelete: 'set null' }),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    closingNote: text('closing_note'),
+    createdAt: createdAt(),
+}, (t) => [
+    index('distress_alerts_estate_created_idx').on(t.estateId, t.createdAt),
+    // At most one open alert per house; pressing again re-uses it
+    uniqueIndex('distress_alerts_one_open_per_unit').on(t.unitId).where(sql`${t.status} in ('active', 'acknowledged')`),
+])
+
+/** Police stations in Abuja with verified phone numbers, maintained by platform admins. Platform-wide (no estate_id). */
+export const policeStations = pgTable('police_stations', {
+    id: id(),
+    name: text('name').notNull(), // e.g. "Lokogoma Police Division"
+    area: text('area').notNull().default(''),
+    address: text('address').notNull().default(''),
+    phone: text('phone').notNull(), // E.164
+    altPhone: text('alt_phone'),
+    latitude: doublePrecision('latitude').notNull(),
+    longitude: doublePrecision('longitude').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: createdAt(),
+})

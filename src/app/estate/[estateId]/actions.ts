@@ -5,7 +5,10 @@ import { revalidatePath } from 'next/cache'
 import { type Actor, actorFromUser } from '@/lib/access'
 import { type ActionState, formObject, runAction } from '@/lib/actions'
 import { requireUser } from '@/lib/auth/current'
+import { acknowledgeDistress, resolveDistress, setEstateLocation } from '@/lib/emergency'
 import { regenerateJoinCode, setEstateLogo, updateEstateDetails } from '@/lib/estates'
+import { CHARGE_KIND_LABEL, recordPayment, voidPayment } from '@/lib/levies'
+import { formatNaira } from '@/lib/format'
 import {
     addHelper, addResident, addVehicle, approveResident, moveOutResident, rejectResident, removeHelper, removeVehicle, setPrimaryContact,
 } from '@/lib/residents'
@@ -164,5 +167,40 @@ export async function unblockVisitorAction (estateId: string, blockId: string, _
     return withActor(estateId, async (actor) => {
         await unblockVisitor(actor, estateId, blockId)
         return 'Block removed.'
+    })
+}
+
+export async function recordPaymentAction (estateId: string, _: ActionState, formData: FormData) {
+    return withActor(estateId, async (actor) => {
+        const p = await recordPayment(actor, estateId, formObject(formData) as never)
+        return `${formatNaira(p.amountKobo)} ${CHARGE_KIND_LABEL[p.kind].toLowerCase()} recorded.`
+    })
+}
+
+export async function voidPaymentAction (estateId: string, paymentId: string, _: ActionState, formData: FormData) {
+    return withActor(estateId, async (actor) => {
+        await voidPayment(actor, estateId, paymentId, String(formData.get('reason') ?? ''))
+        return 'Payment voided.'
+    })
+}
+
+export async function setEstateLocationAction (estateId: string, _: ActionState, formData: FormData) {
+    return withActor(estateId, async (actor) => {
+        await setEstateLocation(actor, estateId, formObject(formData) as never)
+        return 'Estate location saved.'
+    })
+}
+
+export async function acknowledgeAlertStaffAction (estateId: string, alertId: string, _: ActionState) {
+    return withActor(estateId, async (actor) => {
+        await acknowledgeDistress(actor, estateId, alertId)
+        return 'You are responding. The household has been told.'
+    })
+}
+
+export async function resolveAlertStaffAction (estateId: string, alertId: string, _: ActionState, formData: FormData) {
+    return withActor(estateId, async (actor) => {
+        await resolveDistress(actor, estateId, alertId, String(formData.get('note') ?? ''), formData.get('falseAlarm') === 'on')
+        return 'Alert closed.'
     })
 }

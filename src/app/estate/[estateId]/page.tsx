@@ -1,9 +1,11 @@
-import { CheckCircle2, Circle, Clock, DoorOpen, House, KeyRound, MapPin, ScrollText, UserCheck, Users } from 'lucide-react'
+import { Banknote, CheckCircle2, Circle, Clock, DoorOpen, House, KeyRound, MapPin, ScrollText, Siren, UserCheck, Users } from 'lucide-react'
 import Link from 'next/link'
 
 import { CopyButton } from '@/components/CopyButton'
 import { Badge, EmptyState, PageHeader, SectionCard, StatCard, VISIT_STATUS_TONE } from '@/components/ui'
-import { formatDateTime } from '@/lib/format'
+import { listOpenAlerts } from '@/lib/emergency'
+import { formatDateTime, formatNaira } from '@/lib/format'
+import { listPayments } from '@/lib/levies'
 import { countResidents } from '@/lib/residents'
 import { listStaff } from '@/lib/staff'
 import { listZonesWithUnits } from '@/lib/structure'
@@ -14,11 +16,14 @@ import { loadStaffEstate } from './context'
 export default async function EstateOverview ({ params }: { params: Promise<{ estateId: string }> }) {
     const { estateId } = await params
     const { actor, estate, can } = await loadStaffEstate(estateId)
-    const [zones, counts, visits, staff] = await Promise.all([
+    const monthStart = new Date(Date.now() + 60 * 60_000).toISOString().slice(0, 8) + '01'
+    const [zones, counts, visits, staff, openAlerts, monthPayments] = await Promise.all([
         listZonesWithUnits(actor, estate.id),
         can('residents.read') ? countResidents(actor, estate.id) : Promise.resolve(null),
         can('visitors.read') ? listVisitorLog(actor, estate.id, { limit: 8 }) : Promise.resolve([]),
         can('staff.manage') ? listStaff(actor, estate.id) : Promise.resolve([]),
+        can('emergency.respond') ? listOpenAlerts(actor, estate.id) : Promise.resolve([]),
+        can('finance.read') ? listPayments(actor, estate.id, { from: monthStart, limit: 1 }) : Promise.resolve(null),
     ])
     const unitCount = zones.reduce((n, z) => n + z.units.filter(u => u.isActive).length, 0)
     const occupied = zones.reduce((n, z) => n + z.units.filter(u => u.occupantCount > 0).length, 0)
@@ -34,10 +39,21 @@ export default async function EstateOverview ({ params }: { params: Promise<{ es
         <div className='space-y-6'>
             <PageHeader title='Overview' description='How the estate is doing today.' />
 
+            {openAlerts.length > 0 && (
+                <Link href={`${base}/emergencies`} className='flex items-center gap-3 rounded-2xl border-2 border-red-500 bg-red-50 p-4 text-red-800'>
+                    <Siren className='h-7 w-7 shrink-0 animate-pulse' aria-hidden />
+                    <span>
+                        <span className='block font-bold'>{openAlerts.length === 1 ? `Emergency at ${openAlerts[0].unitLabel}, ${openAlerts[0].zoneName}` : `${openAlerts.length} emergencies open`}</span>
+                        <span className='text-sm'>Tap to see the location and respond.</span>
+                    </span>
+                </Link>
+            )}
+
             <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
                 <StatCard label='Units' value={unitCount} icon={House} hint={`${zones.length} streets/blocks · ${occupied} occupied`} />
                 {counts && <StatCard label='Residents' value={counts.active} icon={Users} tone='slate' />}
                 {counts && <StatCard label='Waiting for approval' value={counts.pending} icon={UserCheck} tone={counts.pending > 0 ? 'accent' : 'slate'} href={`${base}/residents#approvals`} />}
+                {monthPayments && <StatCard label='Received this month' value={formatNaira(monthPayments.totalKobo)} icon={Banknote} tone='accent' href={`${base}/payments`} hint={`Levy ${formatNaira(monthPayments.byKind.security_levy.totalKobo)} · Service ${formatNaira(monthPayments.byKind.service_charge.totalKobo)}`} />}
                 {can('visitors.read') && <StatCard label='Visitors inside now' value={insideNow} icon={DoorOpen} tone='accent' href={can('gate.operate') ? `/gate/${estate.id}` : `${base}/visitors`} />}
             </div>
 

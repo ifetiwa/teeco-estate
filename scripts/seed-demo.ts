@@ -16,8 +16,10 @@ import { Pool } from 'pg'
 import { closeDb, getDb, withDbContext } from '../src/db'
 import { users } from '../src/db/schema'
 import type { Actor } from '../src/lib/access'
+import { setEstateLocation } from '../src/lib/emergency'
 import { createEstate, ensureUserByPhone } from '../src/lib/estates'
 import { toLagosInputValue } from '../src/lib/format'
+import { recordPayment } from '../src/lib/levies'
 import { requireNigerianPhone } from '../src/lib/phone'
 import { addResident, addVehicle, addHelper, registerAsResident } from '../src/lib/residents'
 import { addStaff } from '../src/lib/staff'
@@ -38,7 +40,7 @@ const PLATE_LGA = ['ABJ', 'KUJ', 'GWA', 'BWR', 'AMC', 'ABC', 'RBC', 'KWL']
 
 const DEMO_ESTATES = [
     {
-        name: 'Sunshine Gardens Estate', district: 'Lokogoma', street: 'Plot 214, Lokogoma District', gates: 2,
+        name: 'Sunshine Gardens Estate', district: 'Lokogoma', lat: 8.981, lng: 7.471, street: 'Plot 214, Lokogoma District', gates: 2,
         zones: [
             { name: 'Palm Avenue', kind: 'avenue' as const, labels: '1-12', type: 'duplex' as const },
             { name: 'Cedar Close', kind: 'close' as const, labels: '1-8', type: 'bungalow' as const },
@@ -46,7 +48,7 @@ const DEMO_ESTATES = [
         ],
     },
     {
-        name: 'Royal Palms Estate', district: 'Gwarinpa', street: '3rd Avenue, Gwarinpa', gates: 3,
+        name: 'Royal Palms Estate', district: 'Gwarinpa', lat: 9.108, lng: 7.405, street: '3rd Avenue, Gwarinpa', gates: 3,
         zones: [
             { name: '1st Avenue', kind: 'avenue' as const, labels: '1-10', type: 'house' as const },
             { name: '2nd Avenue', kind: 'avenue' as const, labels: '1-10', type: 'house' as const },
@@ -54,7 +56,7 @@ const DEMO_ESTATES = [
         ],
     },
     {
-        name: 'Emerald Court', district: 'Wuye', street: 'Off Ladoke Akintola Boulevard, Wuye', gates: 1,
+        name: 'Emerald Court', district: 'Wuye', lat: 9.062, lng: 7.452, street: 'Off Ladoke Akintola Boulevard, Wuye', gates: 1,
         zones: [
             { name: 'Block B', kind: 'block' as const, labels: 'Flat 1-Flat 8', type: 'flat' as const },
             { name: 'Block C', kind: 'block' as const, labels: 'Flat 1-Flat 8', type: 'flat' as const },
@@ -107,6 +109,8 @@ async function main () {
     for (const [index, def] of DEMO_ESTATES.entries()) {
         const estate = await createEstate(platform, { name: def.name, district: def.district, street: def.street, gateCount: def.gates, adminName: 'Teeco Admin', adminPhone: ownerPhone, contactPhone: '07000000001' })
         await owner.query("update estates set status = 'active' where id = $1", [estate.id])
+        // Approximate district centre (demo only), used when an alert has no GPS fix
+        await setEstateLocation(you, estate.id, { latitude: String(def.lat), longitude: String(def.lng) })
         const unitsByZone: Array<{ zone: string, units: Array<{ id: string, label: string }> }> = []
         for (const z of def.zones) {
             const zone = await createZone(you, estate.id, { name: z.name, kind: z.kind })
@@ -194,6 +198,27 @@ async function main () {
         await decideWalkIn(occupiedUnits[2][1][0], estate.id, w2.id, false, 'Not interested')
         const yourUnit = index === 0 ? allUnits[4].id : occupiedUnits[3][0]
         await logWalkIn(guard, estate.id, { unitId: yourUnit, visitorName: 'Mr Peter (plumber)', visitorPhone: '07000088888', purpose: 'Fix kitchen sink', gate: 1 })
+
+        // Payments: monthly security levy and a yearly service charge, paid by most (not all) houses
+        const months = ['July 2026', 'August 2026', 'September 2026', 'October 2026']
+        const finance = await actorOf(index === 0 ? PERSONAS.finance.phone : ownerPhone)
+        const levy = [10_000, 15_000, 20_000][index]
+        for (const [unitId] of occupiedUnits) {
+            const paysUpTo = rand() < 0.15 ? 0 : 1 + Math.floor(rand() * months.length)
+            for (let m = 0; m < paysUpTo; m++) {
+                await recordPayment(finance, estate.id, {
+                    unitId, kind: 'security_levy', amount: String(levy), period: months[m],
+                    paidOn: `2026-${String(7 + m).padStart(2, '0')}-0${1 + Math.floor(rand() * 8)}`,
+                    method: pick(['bank_transfer', 'bank_transfer', 'cash', 'pos'] as const), reference: rand() < 0.7 ? `TRF${100000 + Math.floor(rand() * 899999)}` : undefined,
+                })
+            }
+            if (rand() < 0.6) {
+                await recordPayment(finance, estate.id, {
+                    unitId, kind: 'service_charge', amount: String([120_000, 150_000, 250_000][index]), period: '2026',
+                    paidOn: `2026-0${1 + Math.floor(rand() * 6)}-1${Math.floor(rand() * 9)}`, method: 'bank_transfer', reference: `TRF${100000 + Math.floor(rand() * 899999)}`,
+                })
+            }
+        }
 
         // Rules last, so the curfew doesn't block the backfilled history
         await updateVisitorRules(you, estate.id, { maxPassesPerResidentPerDay: 10, curfewEnabled: index === 1 ? 'on' : '', curfewStart: '23:30', curfewEnd: '05:00' })

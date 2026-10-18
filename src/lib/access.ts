@@ -21,6 +21,8 @@ export type Capability =
     | 'finance.manage' // charges, confirm payments, waivers
     | 'gate.operate' // verify visitor codes, check in/out (Build 4)
     | 'visitors.read' // visitor log
+    | 'emergency.read' // distress alert history
+    | 'emergency.respond' // receive, acknowledge and close distress alerts
     | 'tickets.read'
     | 'tickets.manage'
     | 'notices.manage'
@@ -29,7 +31,7 @@ export type Capability =
 
 const ALL: Capability[] = [
     'estate.view', 'estate.manage', 'structure.view', 'structure.manage', 'residents.read', 'residents.manage', 'staff.manage',
-    'finance.read', 'finance.manage', 'gate.operate', 'visitors.read', 'tickets.read', 'tickets.manage', 'notices.manage', 'reports.read', 'audit.read',
+    'finance.read', 'finance.manage', 'gate.operate', 'visitors.read', 'emergency.read', 'emergency.respond', 'tickets.read', 'tickets.manage', 'notices.manage', 'reports.read', 'audit.read',
 ]
 
 /**
@@ -39,9 +41,9 @@ const ALL: Capability[] = [
 export const ROLE_CAPABILITIES: Record<EstateRole, readonly Capability[]> = {
     estate_admin: ALL,
     finance_officer: ['estate.view', 'structure.view', 'residents.read', 'finance.read', 'finance.manage', 'reports.read'],
-    guard: ['estate.view', 'structure.view', 'gate.operate', 'visitors.read'],
+    guard: ['estate.view', 'structure.view', 'gate.operate', 'visitors.read', 'emergency.read', 'emergency.respond'],
     resident: [],
-    support: ['estate.view', 'structure.view', 'residents.read', 'finance.read', 'visitors.read', 'tickets.read', 'reports.read', 'audit.read'],
+    support: ['estate.view', 'structure.view', 'residents.read', 'finance.read', 'visitors.read', 'emergency.read', 'tickets.read', 'reports.read', 'audit.read'],
 }
 
 /** Who is performing an action. Built from the signed-in user. */

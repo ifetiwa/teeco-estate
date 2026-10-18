@@ -1,4 +1,4 @@
-import { Building2, Image as ImageIcon, KeyRound, ShieldCheck } from 'lucide-react'
+import { Building2, Image as ImageIcon, KeyRound, MapPin, ShieldCheck } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
@@ -9,7 +9,7 @@ import { formatDateTime } from '@/lib/format'
 import { formatNigerianPhone } from '@/lib/phone'
 import { listSupportGrants } from '@/lib/support'
 
-import { regenerateJoinCodeAction, updateEstateAction, uploadLogoAction } from '../actions'
+import { regenerateJoinCodeAction, setEstateLocationAction, updateEstateAction, uploadLogoAction } from '../actions'
 import { loadStaffEstate } from '../context'
 
 export const metadata: Metadata = { title: 'Estate settings' }
@@ -60,6 +60,17 @@ export default async function SettingsPage ({ params }: { params: Promise<{ esta
                     </div>
                 </div>
             )}
+            {can('estate.manage') && (
+                <SectionCard title='Estate location' icon={MapPin} description='Used for emergency alerts when a resident&apos;s phone cannot share its GPS position, and to find the nearest police stations.'>
+                    <ActionForm action={setEstateLocationAction.bind(null, estate.id)} className='grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end' resetOnSuccess={false}>
+                        <Field label='Latitude' name='latitude'><input id='latitude' name='latitude' inputMode='decimal' placeholder='9.0579' defaultValue={estate.latitude ?? ''} /></Field>
+                        <Field label='Longitude' name='longitude'><input id='longitude' name='longitude' inputMode='decimal' placeholder='7.4951' defaultValue={estate.longitude ?? ''} /></Field>
+                        <SubmitButton>Save location</SubmitButton>
+                    </ActionForm>
+                    <p className='mt-2 text-xs text-slate-500'>In Google Maps, press and hold on the estate gate, then copy the two numbers shown (latitude first).</p>
+                </SectionCard>
+            )}
+
             <SectionCard title='Teeco support access' icon={ShieldCheck}
                 description='Teeco staff can only see your estate’s data after recording a reason. Access is read-only and ends after 2 hours.'>
                 {grants.length === 0 && <p className='text-sm text-slate-500'>No support access so far.</p>}

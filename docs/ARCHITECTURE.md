@@ -81,3 +81,29 @@ shows a banner, and every page view is written to `audit_logs`. The estate admin
 - Estate rules live in `estates.settings.visitors` (max passes per resident per day, curfew) plus `blocked_visitors`.
 - Residents get in-app `notifications` for arrivals and departures; walk-in requests also go by SMS (sent after commit).
 - Visitor log export is CSV with formula-injection protection and is audit-logged.
+
+## Payment records
+
+- `levy_payments`: a payment received from a unit for the **security levy** or the **estate service charge**, recorded
+  by a finance officer or estate admin (`finance.manage`). Amount in kobo (check constraint: positive), what it covers
+  (`period`, free text such as "October 2026"), date paid, method and reference. Payments are never deleted: a mistake
+  is voided with a reason, stays in the history and drops out of totals. Recording and voiding are audit-logged.
+- Staff see totals per charge, a filterable list and an amount-paid-per-house view (`/estate/:id/payments`).
+  Residents see their own house's payments on their home page and get an in-app notification for each one recorded.
+- This is a record of money received outside the app. Invoices, arrears and online payment (Paystack) come with Build 6.
+
+## Emergencies (distress button)
+
+- A current resident presses and holds the emergency button (2 seconds, so a pocket tap doesn't fire it). The phone's
+  GPS position is taken if allowed (positions outside Nigeria are ignored); otherwise the estate's own position from
+  Settings is used, otherwise only the house address.
+- `distress_alerts` stores the alert. One open alert per house (partial unique index); pressing again re-uses it rather
+  than texting everyone again. At most 5 alerts per person per hour.
+- Everyone in the estate is notified in-app and by SMS. Guards and other staff get the house, full address, the caller's
+  name and phone and a Google Maps link; residents get a shorter "stay alert" message. The gate console, staff overview
+  and `/app` show open alerts (with a repeating beep on the gate console) until a guard or admin (`emergency.respond`)
+  responds and closes them; the resident can cancel a false alarm.
+- The resident's alert screen lists the three nearest active `police_stations` by straight-line distance, then 112 and
+  199 (`src/config/emergency.ts`). On a phone it opens the dialer with the nearest number ready; browsers cannot place a
+  call without the person tapping call. Police stations are a platform-wide list kept by platform admins (`/platform`);
+  only numbers confirmed with the station should be added.

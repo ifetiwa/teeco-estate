@@ -1,12 +1,14 @@
-import { Bell, Building2, ChevronRight, Clock, DoorOpen, House, KeyRound, UserPlus, XCircle } from 'lucide-react'
+import { Bell, Building2, ChevronRight, Clock, DoorOpen, House, KeyRound, MapPin, Siren, UserPlus, XCircle } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { ActionForm, SubmitButton } from '@/components/ActionForm'
 import { AppHeader } from '@/components/AppHeader'
+import { DistressButton } from '@/components/DistressButton'
 import { Badge, EmptyState, SectionCard } from '@/components/ui'
 import { actorFromUser } from '@/lib/access'
 import { requireUser } from '@/lib/auth/current'
+import { listOpenAlerts } from '@/lib/emergency'
 import { listMyEstates } from '@/lib/estates'
 import { formatDateTime } from '@/lib/format'
 import { listMyNotifications } from '@/lib/notifications'
@@ -37,10 +39,13 @@ export default async function AppHome () {
     const rejected = occupancies.filter(o => o.status === 'rejected')
     const homes = occupancies.filter(o => o.status === 'active')
     const homeEstates = [...new Set(homes.map(h => h.estateId))]
-    const [requestLists, notes] = await Promise.all([
+    const responderEstates = estates.filter(e => e.staffRoles.some(r => r === 'guard' || r === 'estate_admin'))
+    const [requestLists, notes, alertLists] = await Promise.all([
         Promise.all(homeEstates.map(id => listWalkInRequestsForResident(actor, id))),
         listMyNotifications(actor, 10),
+        Promise.all(responderEstates.map(e => listOpenAlerts(actor, e.id).then(rows => rows.map(r => ({ ...r, estateId: e.id, estateName: e.name }))))),
     ])
+    const openAlerts = alertLists.flat()
     const occupancyForUnit = new Map(homes.map(h => [h.unitId, h.id]))
     const requests = requestLists.flat()
     const unread = notes.filter(n => !n.readAt).length
@@ -62,6 +67,22 @@ export default async function AppHome () {
             </div>
 
             <main className='mx-auto max-w-6xl space-y-8 px-4 py-6'>
+                {openAlerts.length > 0 && (
+                    <section className='space-y-3'>
+                        <h2 className='flex items-center gap-2 text-lg font-semibold text-red-700'><Siren className='h-5 w-5 animate-pulse' aria-hidden /> Emergency</h2>
+                        {openAlerts.map(a => (
+                            <div key={a.alert.id} className='card border-red-300 bg-red-50'>
+                                <p className='text-lg font-bold text-red-800'>{a.unitLabel}, {a.zoneName} · {a.estateName}</p>
+                                <p className='text-sm text-red-700'>{a.raisedByName || 'Resident'} · {formatDateTime(a.alert.createdAt)} · {a.alert.status === 'acknowledged' ? 'Someone is responding' : 'Nobody has responded yet'}</p>
+                                <div className='mt-3 flex flex-wrap gap-2'>
+                                    <a href={a.mapLink} target='_blank' rel='noreferrer' className='btn-danger'><MapPin className='h-4 w-4' aria-hidden /> Open map</a>
+                                    <Link href={`/gate/${a.estateId}`} className='btn-secondary'>Respond from gate console</Link>
+                                </div>
+                            </div>
+                        ))}
+                    </section>
+                )}
+
                 {requests.length > 0 && (
                     <section className='space-y-3'>
                         <h2 className='flex items-center gap-2 text-lg font-semibold text-accent-600'><DoorOpen className='h-5 w-5' aria-hidden /> Visitor at the gate</h2>
@@ -99,6 +120,14 @@ export default async function AppHome () {
                                 </li>
                             ))}
                         </ul>
+                        <div className='mt-4 grid gap-4 sm:grid-cols-2'>
+                            {homes.map(h => (
+                                <div key={h.id}>
+                                    {homes.length > 1 && <p className='mb-1 text-sm font-medium text-slate-600'>{h.unitLabel}, {h.zoneName}</p>}
+                                    <DistressButton occupancyId={h.id} compact />
+                                </div>
+                            ))}
+                        </div>
                     </section>
                 )}
 
