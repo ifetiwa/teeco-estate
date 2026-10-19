@@ -7,9 +7,10 @@ import { PhoneInput } from '@/components/PhoneInput'
 import { Badge, PageHeader, SectionCard } from '@/components/ui'
 import { formatDateTime } from '@/lib/format'
 import { formatNigerianPhone } from '@/lib/phone'
+import { getEstatePolice } from '@/lib/emergency'
 import { listSupportGrants } from '@/lib/support'
 
-import { regenerateJoinCodeAction, setEstateLocationAction, updateEstateAction, uploadLogoAction } from '../actions'
+import { regenerateJoinCodeAction, setEstateLocationAction, setEstatePoliceStationAction, updateEstateAction, uploadLogoAction } from '../actions'
 import { loadStaffEstate } from '../context'
 
 export const metadata: Metadata = { title: 'Estate settings' }
@@ -18,7 +19,10 @@ export default async function SettingsPage ({ params }: { params: Promise<{ esta
     const { estateId } = await params
     const { actor, estate, can } = await loadStaffEstate(estateId)
     if (!can('estate.manage') && !can('audit.read')) notFound()
-    const grants = can('audit.read') ? await listSupportGrants(actor, estate.id) : []
+    const [grants, police] = await Promise.all([
+        can('audit.read') ? listSupportGrants(actor, estate.id) : Promise.resolve([]),
+        can('estate.manage') ? getEstatePolice(actor, estate.id) : Promise.resolve(null),
+    ])
     const now = new Date()
 
     return (
@@ -60,14 +64,31 @@ export default async function SettingsPage ({ params }: { params: Promise<{ esta
                     </div>
                 </div>
             )}
-            {can('estate.manage') && (
-                <SectionCard title='Estate location' icon={MapPin} description='Used for emergency alerts when a resident&apos;s phone cannot share its GPS position, and to find the nearest police stations.'>
-                    <ActionForm action={setEstateLocationAction.bind(null, estate.id)} className='grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end' resetOnSuccess={false}>
-                        <Field label='Latitude' name='latitude'><input id='latitude' name='latitude' inputMode='decimal' placeholder='9.0579' defaultValue={estate.latitude ?? ''} /></Field>
-                        <Field label='Longitude' name='longitude'><input id='longitude' name='longitude' inputMode='decimal' placeholder='7.4951' defaultValue={estate.longitude ?? ''} /></Field>
-                        <SubmitButton>Save location</SubmitButton>
-                    </ActionForm>
-                    <p className='mt-2 text-xs text-slate-500'>In Google Maps, press and hold on the estate gate, then copy the two numbers shown (latitude first).</p>
+            {can('estate.manage') && police && (
+                <SectionCard title='Location and police division' icon={MapPin} description='Used for emergency alerts: the map position when a resident&apos;s phone has no GPS, and the police division shown first to call.'>
+                    <div className='grid gap-6 lg:grid-cols-2'>
+                        <div>
+                            <ActionForm action={setEstateLocationAction.bind(null, estate.id)} className='grid gap-3 sm:grid-cols-2' resetOnSuccess={false}>
+                                <Field label='Latitude' name='latitude'><input id='latitude' name='latitude' inputMode='decimal' placeholder='9.0579' defaultValue={estate.latitude ?? ''} /></Field>
+                                <Field label='Longitude' name='longitude'><input id='longitude' name='longitude' inputMode='decimal' placeholder='7.4951' defaultValue={estate.longitude ?? ''} /></Field>
+                                <div className='sm:col-span-2'><SubmitButton variant='secondary'>Save location</SubmitButton></div>
+                            </ActionForm>
+                            <p className='mt-2 text-xs text-slate-500'>In Google Maps, press and hold on the estate gate, then copy the two numbers shown (latitude first). Saving links the nearest police division if none is chosen yet.</p>
+                        </div>
+                        <div>
+                            <ActionForm action={setEstatePoliceStationAction.bind(null, estate.id)} className='flex flex-col gap-3' resetOnSuccess={false}>
+                                <Field label='Police division for this estate' name='stationId' hint='Pick the division that actually covers your street, e.g. Kubwa Arab Road: Byazhin.'>
+                                    <select id='stationId' name='stationId' defaultValue={police.station?.id ?? ''}>
+                                        <option value=''>Not set</option>
+                                        {police.options.map(o => (
+                                            <option key={o.id} value={o.id}>{o.name}{o.distanceKm !== null ? ` (${o.distanceKm.toFixed(1)} km)` : ''}{o.phone ? '' : ' · no direct line'}</option>
+                                        ))}
+                                    </select>
+                                </Field>
+                                <SubmitButton>Save police division</SubmitButton>
+                            </ActionForm>
+                        </div>
+                    </div>
                 </SectionCard>
             )}
 

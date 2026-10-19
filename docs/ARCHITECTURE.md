@@ -103,6 +103,17 @@ shows a banner, and every page view is written to `audit_logs`. The estate admin
   `levies.showEstateTotalsToResidents`; they never see other houses' payments.
 - This is a record of money received outside the app. Invoices and online payment (Paystack) come with Build 6.
 
+## Dashboards
+
+| Who | Where | What |
+|---|---|---|
+| Teeco super admin (platform admin) | `/platform` | Every estate's figures (units, residents, guards, money received this month, SOS count, police division), open SOS alerts across all estates with address and map, the police directory. Residents' records stay behind logged support access. |
+| Estate admin / finance officer | `/estate/:id` | Their estate only: residents, payments, visitors, emergencies, staff, settings (including location and police division). |
+| Security team (guards; estate admins too) | `/security/:id` | Open SOS alerts with address, map and respond/close; today's expected visitors, arrivals and gate activity; police and emergency numbers. Refreshes itself and beeps on a new alert. The gate console (`/gate/:id`) is for checking codes. |
+| Resident | `/home/:occupancyId` | Emergency button, visitor passes, payments, household. |
+
+`/app` lists the dashboards each person can open.
+
 ## Emergencies (distress button)
 
 - A current resident presses and holds the emergency button (2 seconds, so a pocket tap doesn't fire it). The phone's
@@ -110,11 +121,18 @@ shows a banner, and every page view is written to `audit_logs`. The estate admin
   Settings is used, otherwise only the house address.
 - `distress_alerts` stores the alert. One open alert per house (partial unique index); pressing again re-uses it rather
   than texting everyone again. At most 5 alerts per person per hour.
-- Everyone in the estate is notified in-app and by SMS. Guards and other staff get the house, full address, the caller's
-  name and phone and a Google Maps link; residents get a shorter "stay alert" message. The gate console, staff overview
-  and `/app` show open alerts (with a repeating beep on the gate console) until a guard or admin (`emergency.respond`)
-  responds and closes them; the resident can cancel a false alarm.
-- The resident's alert screen lists the three nearest active `police_stations` by straight-line distance, then 112 and
-  199 (`src/config/emergency.ts`). On a phone it opens the dialer with the nearest number ready; browsers cannot place a
-  call without the person tapping call. Police stations are a platform-wide list kept by platform admins (`/platform`);
-  only numbers confirmed with the station should be added.
+- **Who gets the address:** only the estate's guards and estate admins, and Teeco super admins (all estates). They get
+  the house, full address, caller's name and phone and a Google Maps link, in-app and by SMS. Everyone else in the
+  estate (residents, finance officers) is told there is an emergency and to stay indoors, never where. The same split
+  applies when the alert is cancelled or closed.
+- Guards also receive in-app visitor updates: each new visitor pass (who, which house, when, vehicle) and each
+  resident's answer to a walk-in at the gate.
+- **Police:** each estate is linked to a police division (`estates.police_station_id`): set to the nearest station
+  when the estate's position is saved, and changeable by the estate admin (e.g. Kubwa Arab Road → Byazhin). The alert
+  screen lists that division first, then the nearest others, then the FCT Police Command emergency lines, 112 and 199
+  (`src/config/emergency.ts`). On a phone it opens the dialer on the first number; browsers cannot place a call
+  without the person tapping call.
+- `police_stations` is a platform-wide list kept by super admins. Migration 0008 seeds the Abuja divisions found
+  online (mostly the FCT Police Command's July 2022 division lines), with the source of each number; positions are
+  approximate district centres. A station with no published number (Byazhin) is listed without one. Numbers should be
+  confirmed by phone and marked confirmed on `/platform`.

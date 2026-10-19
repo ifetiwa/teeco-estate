@@ -109,6 +109,7 @@ export async function acknowledgeAlertAction (estateId: string, alertId: string,
     return runAction(async () => {
         await acknowledgeDistress(actorFromUser(user), estateId, alertId)
         revalidatePath(`/gate/${estateId}`)
+        revalidatePath(`/security/${estateId}`)
         return 'You are responding. The household has been told help is coming.'
     })
 }
@@ -118,6 +119,7 @@ export async function resolveAlertAction (estateId: string, alertId: string, _: 
     return runAction(async () => {
         await resolveDistress(actorFromUser(user), estateId, alertId, String(formData.get('note') ?? ''), formData.get('falseAlarm') === 'on')
         revalidatePath(`/gate/${estateId}`)
+        revalidatePath(`/security/${estateId}`)
         return 'Alert closed.'
     })
 }

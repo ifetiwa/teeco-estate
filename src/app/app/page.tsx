@@ -1,4 +1,4 @@
-import { Bell, Building2, ChevronRight, Clock, DoorOpen, House, KeyRound, MapPin, Siren, UserPlus, XCircle } from 'lucide-react'
+import { Bell, Building2, ChevronRight, Clock, Crown, DoorOpen, House, KeyRound, MapPin, ShieldCheck, Siren, UserPlus, XCircle } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
@@ -50,6 +50,18 @@ export default async function AppHome () {
     const requests = requestLists.flat()
     const unread = notes.filter(n => !n.readAt).length
     const managed = estates.filter(e => e.staffRoles.length > 0)
+    // One card per dashboard the person can use: Teeco super admin, each estate's admin area, each estate's security dashboard
+    const dashboards: Array<{ href: string, title: string, subtitle: string, icon: typeof Building2, tone: string, roles: string[] }> = [
+        ...(user.isPlatformAdmin ? [{ href: '/platform', title: 'Super admin', subtitle: 'All estates, emergencies and police directory', icon: Crown, tone: 'bg-slate-900 text-white', roles: [] }] : []),
+        ...managed.flatMap(e => [
+            ...(e.staffRoles.some(r => r !== 'guard')
+                ? [{ href: `/estate/${e.id}`, title: e.name, subtitle: 'Estate management', icon: Building2, tone: 'bg-brand-50 text-brand-700', roles: e.staffRoles.filter(r => r !== 'guard') }]
+                : []),
+            ...(e.staffRoles.some(r => r === 'guard' || r === 'estate_admin')
+                ? [{ href: `/security/${e.id}`, title: e.name, subtitle: 'Security: emergencies and visitors', icon: ShieldCheck, tone: 'bg-slate-100 text-slate-800', roles: e.staffRoles.filter(r => r === 'guard') }]
+                : []),
+        ]),
+    ]
 
     return (
         <>
@@ -76,7 +88,7 @@ export default async function AppHome () {
                                 <p className='text-sm text-red-700'>{a.raisedByName || 'Resident'} · {formatDateTime(a.alert.createdAt)} · {a.alert.status === 'acknowledged' ? 'Someone is responding' : 'Nobody has responded yet'}</p>
                                 <div className='mt-3 flex flex-wrap gap-2'>
                                     <a href={a.mapLink} target='_blank' rel='noreferrer' className='btn-danger'><MapPin className='h-4 w-4' aria-hidden /> Open map</a>
-                                    <Link href={`/gate/${a.estateId}`} className='btn-secondary'>Respond from gate console</Link>
+                                    <Link href={`/security/${a.estateId}`} className='btn-secondary'>Open security dashboard</Link>
                                 </div>
                             </div>
                         ))}
@@ -131,29 +143,27 @@ export default async function AppHome () {
                     </section>
                 )}
 
-                {managed.length > 0 && (
+                {dashboards.length > 0 && (
                     <section>
-                        <h2 className='mb-3 text-lg font-semibold'>Your estates</h2>
+                        <h2 className='mb-3 text-lg font-semibold'>Your dashboards</h2>
                         <ul className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-                            {managed.map(e => {
-                                const guardOnly = e.staffRoles.length === 1 && e.staffRoles[0] === 'guard'
-                                return (
-                                    <li key={e.id}>
-                                        <Link href={guardOnly ? `/gate/${e.id}` : `/estate/${e.id}`} className='card-link flex h-full items-start gap-4'>
-                                            <span className='grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700'>
-                                                {guardOnly ? <DoorOpen className='h-6 w-6' aria-hidden /> : <Building2 className='h-6 w-6' aria-hidden />}
-                                            </span>
-                                            <span className='min-w-0 flex-1'>
-                                                <span className='block font-semibold'>{e.name}</span>
+                            {dashboards.map(d => (
+                                <li key={d.href}>
+                                    <Link href={d.href} className='card-link flex h-full items-start gap-4'>
+                                        <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl ${d.tone}`}><d.icon className='h-6 w-6' aria-hidden /></span>
+                                        <span className='min-w-0 flex-1'>
+                                            <span className='block font-semibold'>{d.title}</span>
+                                            <span className='block text-sm text-slate-500'>{d.subtitle}</span>
+                                            {d.roles.length > 0 && (
                                                 <span className='mt-2 flex flex-wrap gap-1.5'>
-                                                    {e.staffRoles.map(r => <Badge key={r} tone={r === 'estate_admin' ? 'green' : r === 'guard' ? 'blue' : 'amber'}>{ROLE_LABELS[r]}</Badge>)}
+                                                    {d.roles.map(r => <Badge key={r} tone={r === 'estate_admin' ? 'green' : r === 'guard' ? 'blue' : 'amber'}>{ROLE_LABELS[r]}</Badge>)}
                                                 </span>
-                                            </span>
-                                            <ChevronRight className='h-5 w-5 text-slate-400' aria-hidden />
-                                        </Link>
-                                    </li>
-                                )
-                            })}
+                                            )}
+                                        </span>
+                                        <ChevronRight className='h-5 w-5 text-slate-400' aria-hidden />
+                                    </Link>
+                                </li>
+                            ))}
                         </ul>
                     </section>
                 )}

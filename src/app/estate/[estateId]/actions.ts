@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { type Actor, actorFromUser } from '@/lib/access'
 import { type ActionState, formObject, runAction } from '@/lib/actions'
 import { requireUser } from '@/lib/auth/current'
-import { acknowledgeDistress, resolveDistress, setEstateLocation } from '@/lib/emergency'
+import { acknowledgeDistress, resolveDistress, setEstateLocation, setEstatePoliceStation } from '@/lib/emergency'
 import { regenerateJoinCode, setEstateLogo, updateEstateDetails } from '@/lib/estates'
 import { CHARGE_KIND_LABEL, recordPayment, sendPaymentReminders, updateChargeSettings, voidPayment } from '@/lib/levies'
 import { formatNaira } from '@/lib/format'
@@ -209,8 +209,8 @@ export async function voidPaymentAction (estateId: string, paymentId: string, _:
 
 export async function setEstateLocationAction (estateId: string, _: ActionState, formData: FormData) {
     return withActor(estateId, async (actor) => {
-        await setEstateLocation(actor, estateId, formObject(formData) as never)
-        return 'Estate location saved.'
+        const station = await setEstateLocation(actor, estateId, formObject(formData) as never)
+        return station ? `Estate location saved. Police division: ${station.name}.` : 'Estate location saved.'
     })
 }
 
@@ -225,5 +225,13 @@ export async function resolveAlertStaffAction (estateId: string, alertId: string
     return withActor(estateId, async (actor) => {
         await resolveDistress(actor, estateId, alertId, String(formData.get('note') ?? ''), formData.get('falseAlarm') === 'on')
         return 'Alert closed.'
+    })
+}
+
+export async function setEstatePoliceStationAction (estateId: string, _: ActionState, formData: FormData) {
+    return withActor(estateId, async (actor) => {
+        const id = String(formData.get('stationId') ?? '')
+        await setEstatePoliceStation(actor, estateId, id || null)
+        return id ? 'Police division saved.' : 'Police division cleared.'
     })
 }

@@ -246,3 +246,21 @@ describe('permissions', () => {
         await expect(createPass(s.resident, s.estate.id, { unitId: s.unitId, visitorName: 'Past', validFrom: lagos(-300), validUntil: lagos(-200) })).rejects.toThrow('already passed')
     })
 })
+
+describe('updates for the security team', () => {
+    it('guards are told about expected visitors and residents\' answers at the gate', async () => {
+        const s = await setup()
+        await createPass(s.resident, s.estate.id, { unitId: s.unitId, visitorName: 'Kemi Adebayo', validFrom: lagos(-5), validUntil: lagos(180), vehiclePlate: 'ABC-123DE' })
+        const [expected] = await listMyNotifications(s.guard)
+        expect(expected).toMatchObject({ type: 'visitor.expected', title: 'Expected visitor: Kemi Adebayo', link: `/security/${s.estate.id}` })
+        expect(expected.body).toContain('1, 1st Avenue')
+        expect(expected.body).toContain('ABC123DE')
+
+        const walkIn = await logWalkIn(s.guard, s.estate.id, { unitId: s.unitId, visitorName: 'Glovo Rider', gate: 1 })
+        await decideWalkIn(s.resident, s.estate.id, walkIn.id, false, 'Not expecting anyone')
+        const [answer] = await listMyNotifications(s.guard)
+        expect(answer).toMatchObject({ type: 'visitor.walk_in_declined', title: 'Do not admit: Glovo Rider' })
+        // The estate admin is not a guard, so isn't sent these
+        expect((await listMyNotifications(s.admin)).some(n => n.type.startsWith('visitor.'))).toBe(false)
+    })
+})

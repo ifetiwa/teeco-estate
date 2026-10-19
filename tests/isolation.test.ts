@@ -208,7 +208,11 @@ describe('support access for platform admins', () => {
         await expect(getEstateForStaff(platform, estate.id)).rejects.toThrow('permission')
         await expect(listResidents(platform, estate.id)).rejects.toThrow('permission')
         const overview = await listAllEstates(platform)
-        expect(Object.keys(overview[0]).sort()).toEqual(['createdAt', 'district', 'id', 'name', 'residentCount', 'status', 'unitCount'])
+        // Counts and totals only: no resident names, phones or addresses
+        expect(Object.keys(overview[0]).sort()).toEqual([
+            'alertsThisMonth', 'collectedThisMonthKobo', 'createdAt', 'district', 'guardCount', 'hasLocation', 'id', 'name', 'openAlerts',
+            'policeStation', 'residentCount', 'status', 'unitCount',
+        ])
     })
 
     it('a reasoned grant gives read-only access and is logged for the estate admin', async () => {

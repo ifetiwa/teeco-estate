@@ -1,9 +1,10 @@
-import { Banknote, CheckCircle2, Circle, Clock, DoorOpen, House, KeyRound, MapPin, ScrollText, Siren, UserCheck, Users } from 'lucide-react'
+import { Banknote, CheckCircle2, Circle, Clock, DoorOpen, House, KeyRound, MapPin, Phone, ScrollText, ShieldCheck, Siren, UserCheck, Users } from 'lucide-react'
 import Link from 'next/link'
 
 import { CopyButton } from '@/components/CopyButton'
+import { PoliceContacts } from '@/components/PoliceContacts'
 import { Badge, EmptyState, PageHeader, SectionCard, StatCard, VISIT_STATUS_TONE } from '@/components/ui'
-import { listOpenAlerts } from '@/lib/emergency'
+import { getEstatePolice, listOpenAlerts } from '@/lib/emergency'
 import { formatDateTime, formatNaira } from '@/lib/format'
 import { listPayments } from '@/lib/levies'
 import { countResidents } from '@/lib/residents'
@@ -17,22 +18,25 @@ export default async function EstateOverview ({ params }: { params: Promise<{ es
     const { estateId } = await params
     const { actor, estate, can } = await loadStaffEstate(estateId)
     const monthStart = new Date(Date.now() + 60 * 60_000).toISOString().slice(0, 8) + '01'
-    const [zones, counts, visits, staff, openAlerts, monthPayments] = await Promise.all([
+    const [zones, counts, visits, staff, openAlerts, monthPayments, police] = await Promise.all([
         listZonesWithUnits(actor, estate.id),
         can('residents.read') ? countResidents(actor, estate.id) : Promise.resolve(null),
         can('visitors.read') ? listVisitorLog(actor, estate.id, { limit: 8 }) : Promise.resolve([]),
         can('staff.manage') ? listStaff(actor, estate.id) : Promise.resolve([]),
         can('emergency.respond') ? listOpenAlerts(actor, estate.id) : Promise.resolve([]),
         can('finance.read') ? listPayments(actor, estate.id, { from: monthStart, limit: 1 }) : Promise.resolve(null),
+        getEstatePolice(actor, estate.id),
     ])
     const unitCount = zones.reduce((n, z) => n + z.units.filter(u => u.isActive).length, 0)
     const occupied = zones.reduce((n, z) => n + z.units.filter(u => u.occupantCount > 0).length, 0)
     const insideNow = visits.filter(v => v.visit.status === 'checked_in').length
     const base = `/estate/${estate.id}`
+    const guardCount = staff.filter(m => m.isActive && m.role === 'guard').length
     const checklist = [
         { done: zones.length > 0 && unitCount > 0, label: 'Add streets or blocks and their houses', href: `${base}/units` },
         { done: staff.some(s => s.isActive && s.role === 'guard'), label: 'Add your gate guards', href: `${base}/staff` },
         { done: (counts?.active ?? 0) > 0, label: 'Add residents or share the join code', href: `${base}/residents` },
+        { done: police.station !== null, label: 'Set the estate location and police division', href: `${base}/settings` },
     ]
 
     return (
@@ -58,6 +62,22 @@ export default async function EstateOverview ({ params }: { params: Promise<{ es
             </div>
 
             <div className='grid gap-6 lg:grid-cols-2'>
+                {can('emergency.respond') && (
+                    <SectionCard title='Security' icon={ShieldCheck}
+                        actions={<Link href={`/security/${estate.id}`} className='text-sm font-medium text-brand-700 hover:underline'>Security dashboard</Link>}>
+                        <p className='text-sm text-slate-600'>
+                            {openAlerts.length > 0 ? <span className='font-semibold text-red-700'>{openAlerts.length} emergency open. </span> : 'No open emergencies. '}
+                            {can('staff.manage') && `${guardCount} guard${guardCount === 1 ? '' : 's'} receive emergency alerts with the address and map, and visitor updates.`}
+                        </p>
+                        <p className='mt-2 text-xs text-slate-500'>Only guards, estate admins and Teeco super admins are sent the address of an emergency. Other residents are told to stay alert.</p>
+                    </SectionCard>
+                )}
+
+                <SectionCard title='Police' icon={Phone} description={police.station ? "Your estate's police division, then the FCT Command lines." : 'No police division linked yet.'}
+                    actions={can('estate.manage') ? <Link href={`${base}/settings`} className='text-sm font-medium text-brand-700 hover:underline'>{police.station ? 'Change' : 'Set it'}</Link> : undefined}>
+                    <PoliceContacts stations={police.station ? [police.station] : []} lines={police.emergencyLines.slice(0, 2)} />
+                </SectionCard>
+
                 {can('estate.manage') && (
                     <SectionCard title='Invite residents' description='Residents sign in with their phone, enter this code, and you approve them.' icon={KeyRound}>
                         <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl bg-brand-50 p-4'>

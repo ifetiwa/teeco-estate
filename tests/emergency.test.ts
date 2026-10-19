@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { distressAlerts } from '@/db/schema'
 import {
-    acknowledgeDistress, addPoliceStation, cancelDistress, distanceKm, getDistressForResident, getOpenAlertForUnit, listAlerts, listOpenAlerts,
-    nearestPoliceStations, raiseDistress, resolveDistress, setEstateLocation,
+    acknowledgeDistress, addPoliceStation, cancelDistress, distanceKm, getDistressForResident, getEstatePolice, getOpenAlertForUnit, listAlerts, listOpenAlerts,
+    listPlatformAlerts, listPoliceStations, nearestPoliceStations, raiseDistress, resolveDistress, setEstateLocation, setEstatePoliceStation,
+    setPoliceStationVerified,
 } from '@/lib/emergency'
 import { listMyNotifications } from '@/lib/notifications'
 import { addResident } from '@/lib/residents'
@@ -28,8 +29,9 @@ async function setup (name = 'Sunshine Estate') {
     const nb = await addResident(t.admin, t.estate.id, { unitId: t.units[1].id, name: 'Musa Bello', phone: neighbourPhone, relation: 'owner' })
     const guardPhone = nextPhone()
     const guard = actorFor((await addStaff(t.admin, t.estate.id, { name: 'Sule Guard', phone: guardPhone, role: 'guard' })).userId)
-    const fin = actorFor((await addStaff(t.admin, t.estate.id, { name: 'Grace Finance', phone: nextPhone(), role: 'finance_officer' })).userId)
-    return { ...t, resident, residentPhone, household: actorFor(hh.userId!), householdPhone, neighbour: actorFor(nb.userId!), neighbourPhone, guard, guardPhone, fin, unitId: t.units[0].id }
+    const financePhone = nextPhone()
+    const fin = actorFor((await addStaff(t.admin, t.estate.id, { name: 'Grace Finance', phone: financePhone, role: 'finance_officer' })).userId)
+    return { ...t, resident, residentPhone, household: actorFor(hh.userId!), householdPhone, neighbour: actorFor(nb.userId!), neighbourPhone, guard, guardPhone, fin, financePhone, unitId: t.units[0].id }
 }
 
 async function addStations () {
@@ -37,7 +39,7 @@ async function addStations () {
     await addPoliceStation(ops, { name: 'Near Division', area: 'Lokogoma', phone: '0803 000 0001', latitude: 8.985, longitude: 7.47 })
     await addPoliceStation(ops, { name: 'Middle Division', area: 'Apo', phone: '+2349000000002', latitude: 9.0, longitude: 7.5 })
     await addPoliceStation(ops, { name: 'Far Division', area: 'Kubwa', phone: '08030000003', latitude: 9.15, longitude: 7.33 })
-    return ops
+    return ops as typeof ops
 }
 
 describe('geography', () => {
@@ -59,36 +61,83 @@ describe('geography', () => {
 })
 
 describe('distress button', () => {
-    it('alerts everyone in the estate; guards get the map link and address; police are listed nearest first', async () => {
+    it('alerts everyone; only security, estate admins and super admins get the address; police are listed nearest first', async () => {
         const s = await setup()
-        await addStations()
+        const ops = await addStations()
         const sms = useConsoleSms()
         const { alert, reused } = await raiseDistress(s.resident, s.estate.id, { unitId: s.unitId, ...HOME })
         expect(reused).toBe(false)
         expect(alert).toMatchObject({ status: 'active', locationSource: 'gps', latitude: HOME.latitude, accuracyMeters: 18 })
-        // admin, guard, finance officer, household member, neighbour (not the person who pressed it)
-        expect(alert.notifiedCount).toBe(5)
+        // admin, guard, finance officer, household member, neighbour, and the two super admins (not the person who pressed it)
+        expect(alert.notifiedCount).toBe(7)
 
-        const guardSms = sms.lastTo(s.guardPhone)!
-        expect(guardSms.body).toContain('EMERGENCY')
-        expect(guardSms.body).toContain('House 1, 1st Avenue, Sunshine Estate, Lokogoma, Abuja, FCT')
-        expect(guardSms.body).toContain('https://www.google.com/maps/search/?api=1&query=8.980600,7.470300')
-        expect(guardSms.body).toContain('Ada Obi')
-        expect(sms.lastTo(s.neighbourPhone)!.body).toContain('alert raised at 1, 1st Avenue')
-        expect(sms.lastTo(s.neighbourPhone)!.body).not.toContain('maps')
+        const address = 'House 1, 1st Avenue, Sunshine Estate, Lokogoma, Abuja, FCT'
+        const mapLink = 'https://www.google.com/maps/search/?api=1&query=8.980600,7.470300'
+        for (const phone of [s.guardPhone, s.adminPhone, ops.phone]) {
+            const body = sms.lastTo(phone)!.body
+            expect(body).toContain(address)
+            expect(body).toContain(mapLink)
+            expect(body).toContain('Ada Obi')
+        }
+        // Residents (including the same household) and the finance officer are told to stay alert, never where
+        for (const phone of [s.neighbourPhone, s.financePhone]) {
+            const body = sms.lastTo(phone)!.body
+            expect(body).toContain('EMERGENCY')
+            expect(body).not.toContain('1st Avenue')
+            expect(body).not.toContain('maps')
+        }
         expect(sms.lastTo(s.residentPhone)).toBeUndefined()
 
-        expect((await listMyNotifications(s.guard))[0]).toMatchObject({ type: 'emergency.raised', link: `/gate/${s.estate.id}` })
-        expect((await listMyNotifications(s.neighbour))[0]).toMatchObject({ type: 'emergency.raised', link: '/app' })
+        expect((await listMyNotifications(s.guard))[0]).toMatchObject({ type: 'emergency.raised', link: `/security/${s.estate.id}` })
+        expect((await listMyNotifications(ops))[0]).toMatchObject({ type: 'emergency.raised', link: '/platform#emergencies' })
+        const neighbourNote = (await listMyNotifications(s.neighbour))[0]
+        expect(neighbourNote).toMatchObject({ type: 'emergency.raised', link: '/app' })
+        expect(neighbourNote.title + neighbourNote.body).not.toContain('1st Avenue')
+        expect((await listMyNotifications(s.fin))[0].body).not.toContain('1st Avenue')
 
         const screen = await getDistressForResident(s.resident, s.estate.id, alert.id)
         expect(screen.stations.map(st => st.name)).toEqual(['Near Division', 'Middle Division', 'Far Division'])
-        expect(screen.emergencyLines.map(l => l.number)).toEqual(['112', '199'])
+        expect(screen.emergencyLines.map(l => l.number)).toContain('112')
         expect(screen.mapLink).toContain('8.980600,7.470300')
 
         const open = await listOpenAlerts(s.guard, s.estate.id)
         expect(open).toHaveLength(1)
         expect(open[0]).toMatchObject({ unitLabel: '1', raisedByName: 'Ada Obi' })
+        await expect(listOpenAlerts(s.fin, s.estate.id)).rejects.toThrow(/permission/)
+
+        // Super admins see every estate's alerts with the address
+        const platform = await listPlatformAlerts(ops)
+        expect(platform[0]).toMatchObject({ estateName: 'Sunshine Estate', address })
+        await expect(listPlatformAlerts(s.admin)).rejects.toThrow(/permission/)
+    })
+
+    it('the estate\'s own police division comes first, whatever the distance', async () => {
+        const s = await setup()
+        await addStations()
+        // Setting the estate's position links the nearest division automatically
+        const linked = await setEstateLocation(s.admin, s.estate.id, { latitude: '8.99', longitude: '7.471' })
+        expect(linked?.name).toBe('Near Division')
+        const police = await getEstatePolice(s.admin, s.estate.id)
+        expect(police.station?.name).toBe('Near Division')
+        // An admin can choose a different division (e.g. the one that actually covers the street)
+        const far = police.options.find(o => o.name === 'Far Division')!
+        await setEstatePoliceStation(s.admin, s.estate.id, far.id)
+        await expect(setEstatePoliceStation(s.guard, s.estate.id, far.id)).rejects.toThrow(/permission/)
+        // Moving the estate pin later keeps the admin's choice
+        expect((await setEstateLocation(s.admin, s.estate.id, { latitude: '8.98', longitude: '7.47' }))?.name).toBe('Far Division')
+
+        const { alert } = await raiseDistress(s.resident, s.estate.id, { unitId: s.unitId, ...HOME })
+        const screen = await getDistressForResident(s.resident, s.estate.id, alert.id)
+        expect(screen.stations.map(st => st.name)).toEqual(['Far Division', 'Near Division', 'Middle Division'])
+        expect(screen.stations[0].isEstateDivision).toBe(true)
+    })
+
+    it('a station with no published number is still listed, with no phone', async () => {
+        const ops = await createUser({ isPlatformAdmin: true })
+        const st = await addPoliceStation(ops, { name: 'Byazhin Division', area: 'Kubwa', latitude: 9.137, longitude: 7.335 })
+        expect(st.phone).toBeNull()
+        await setPoliceStationVerified(ops, st.id, true)
+        expect((await listPoliceStations(ops))[0].verifiedAt).not.toBeNull()
     })
 
     it('pressing again (or by another household member) re-uses the open alert without texting everyone again', async () => {

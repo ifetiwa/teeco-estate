@@ -4,10 +4,11 @@ import { notFound } from 'next/navigation'
 
 import { ActionForm, SubmitButton } from '@/components/ActionForm'
 import { AppHeader } from '@/components/AppHeader'
+import { PoliceContacts } from '@/components/PoliceContacts'
 import { Badge, PageHeader, SectionCard } from '@/components/ui'
 import { actorFromUser } from '@/lib/access'
 import { requireUser } from '@/lib/auth/current'
-import { DISTRESS_STATUS_LABEL, formatDialNumber, getDistressForResident } from '@/lib/emergency'
+import { DISTRESS_STATUS_LABEL, getDistressForResident } from '@/lib/emergency'
 import { NotFoundError } from '@/lib/errors'
 import { formatDateTime } from '@/lib/format'
 import { getMyHome } from '@/lib/residents'
@@ -32,7 +33,7 @@ export default async function EmergencyAlertPage ({ params }: { params: Promise<
     }
     const { alert, stations, emergencyLines } = screen
     const open = alert.status === 'active' || alert.status === 'acknowledged'
-    const firstNumber = stations[0]?.phone ?? emergencyLines[0].number
+    const firstNumber = stations.find(st => st.phone)?.phone ?? emergencyLines[0].number
 
     return (
         <>
@@ -64,31 +65,8 @@ export default async function EmergencyAlertPage ({ params }: { params: Promise<
                     </div>
                 </div>
 
-                <SectionCard title='Call the police' icon={Phone} description={stations.length ? 'Nearest stations to you first. Tap to call.' : 'Tap to call.'}>
-                    <ul className='space-y-2'>
-                        {stations.map((s, i) => (
-                            <li key={s.id}>
-                                <a href={`tel:${s.phone}`} className={`flex items-center gap-3 rounded-xl px-4 py-3 ring-1 transition ${i === 0 ? 'bg-red-600 text-white ring-red-600 hover:bg-red-700' : 'bg-white ring-slate-200 hover:bg-slate-50'}`}>
-                                    <Phone className='h-5 w-5 shrink-0' aria-hidden />
-                                    <span className='min-w-0 flex-1'>
-                                        <span className='block font-semibold'>{s.name}</span>
-                                        <span className={`block text-sm ${i === 0 ? 'text-red-100' : 'text-slate-500'}`}>{[s.area, `${s.distanceKm.toFixed(1)} km away`].filter(Boolean).join(' · ')}</span>
-                                    </span>
-                                    <span className='font-mono text-sm font-semibold'>{formatDialNumber(s.phone)}</span>
-                                </a>
-                                {s.altPhone && <a href={`tel:${s.altPhone}`} className='mt-1 block pl-12 text-sm font-medium text-brand-700 hover:underline'>Other line: {formatDialNumber(s.altPhone)}</a>}
-                            </li>
-                        ))}
-                        {emergencyLines.map((l, i) => (
-                            <li key={l.number}>
-                                <a href={`tel:${l.number}`} className={`flex items-center gap-3 rounded-xl px-4 py-3 ring-1 transition ${stations.length === 0 && i === 0 ? 'bg-red-600 text-white ring-red-600 hover:bg-red-700' : 'bg-white ring-slate-200 hover:bg-slate-50'}`}>
-                                    <Phone className='h-5 w-5 shrink-0' aria-hidden />
-                                    <span className='flex-1 font-semibold'>{l.label}</span>
-                                    <span className='font-mono text-lg font-bold'>{l.number}</span>
-                                </a>
-                            </li>
-                        ))}
-                    </ul>
+                <SectionCard title='Call the police' icon={Phone} description='Your estate&apos;s police division first, then the nearest others and the FCT Police Command. Tap to call.'>
+                    <PoliceContacts stations={stations} lines={emergencyLines} urgent={open} />
                 </SectionCard>
 
                 <SectionCard title='Your location' icon={MapPin}>

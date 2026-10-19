@@ -177,15 +177,26 @@ export async function listMyEstates (actor: Actor): Promise<MyEstate[]> {
 }
 
 /** Platform overview: estate names and counts only, never resident data. */
-export async function listAllEstates (actor: Actor) {
+/**
+ * Every estate with the figures a Teeco super admin needs: size, open SOS alerts, money received this month and the
+ * linked police division. Counts and totals only; residents' details stay behind logged support access.
+ */
+export async function listAllEstates (actor: Actor, now: Date = new Date()) {
     requirePlatformAdmin(actor)
+    const monthStart = new Date(now.getTime() + 60 * 60_000).toISOString().slice(0, 8) + '01'
     return withDbContext({ system: true }, tx => tx.select({
         id: estates.id,
         name: estates.name,
         district: estates.district,
         status: estates.status,
         createdAt: estates.createdAt,
+        hasLocation: sql<boolean>`${estates.latitude} is not null`,
         unitCount: sql<number>`(select count(*)::int from units u where u.estate_id = "estates"."id")`,
         residentCount: sql<number>`(select count(*)::int from occupancies o where o.estate_id = "estates"."id" and o.status = 'active')`,
-    }).from(estates).orderBy(asc(estates.name)))
+        guardCount: sql<number>`(select count(*)::int from memberships m where m.estate_id = "estates"."id" and m.role = 'guard' and m.is_active)`,
+        openAlerts: sql<number>`(select count(*)::int from distress_alerts d where d.estate_id = "estates"."id" and d.status in ('active', 'acknowledged'))`,
+        alertsThisMonth: sql<number>`(select count(*)::int from distress_alerts d where d.estate_id = "estates"."id" and d.created_at >= ${monthStart}::date)`,
+        collectedThisMonthKobo: sql<string>`(select coalesce(sum(p.amount_kobo), 0) from levy_payments p where p.estate_id = "estates"."id" and p.voided_at is null and p.paid_on >= ${monthStart}::date)`,
+        policeStation: sql<string | null>`(select s.name from police_stations s where s.id = "estates"."police_station_id")`,
+    }).from(estates).orderBy(asc(estates.name))).then(rows => rows.map(r => ({ ...r, collectedThisMonthKobo: Number(r.collectedThisMonthKobo) })))
 }

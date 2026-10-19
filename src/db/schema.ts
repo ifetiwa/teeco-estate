@@ -1,6 +1,6 @@
 // Database schema. Every estate-owned table carries estate_id (see docs/ARCHITECTURE.md).
 import { sql } from 'drizzle-orm'
-import { bigint, boolean, date, doublePrecision, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { type AnyPgColumn, bigint, boolean, date, doublePrecision, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 const id = () => uuid('id').primaryKey().defaultRandom()
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
@@ -55,6 +55,8 @@ export const estates = pgTable('estates', {
     // Map position of the estate (WGS84). Used when a distress alert has no GPS fix, and to find nearby police.
     latitude: doublePrecision('latitude'),
     longitude: doublePrecision('longitude'),
+    // The police division that covers the estate, shown first on every distress alert. Set from the nearest station or by an admin.
+    policeStationId: uuid('police_station_id').references((): AnyPgColumn => policeStations.id, { onDelete: 'set null' }),
     joinCode: text('join_code').notNull().unique(),
     settings: jsonb('settings').notNull().default({}), // overrides of PLATFORM_DEFAULTS
     status: estateStatus('status').notNull().default('trial'),
@@ -354,16 +356,18 @@ export const distressAlerts = pgTable('distress_alerts', {
     uniqueIndex('distress_alerts_one_open_per_unit').on(t.unitId).where(sql`${t.status} in ('active', 'acknowledged')`),
 ])
 
-/** Police stations in Abuja with verified phone numbers, maintained by platform admins. Platform-wide (no estate_id). */
+/** Police stations in Abuja, maintained by platform admins. Platform-wide (no estate_id). */
 export const policeStations = pgTable('police_stations', {
     id: id(),
     name: text('name').notNull(), // e.g. "Lokogoma Police Division"
     area: text('area').notNull().default(''),
     address: text('address').notNull().default(''),
-    phone: text('phone').notNull(), // E.164
+    phone: text('phone'), // null when no direct line is published; alerts then fall back to the command lines
     altPhone: text('alt_phone'),
     latitude: doublePrecision('latitude').notNull(),
     longitude: doublePrecision('longitude').notNull(),
+    source: text('source'), // where the number came from, e.g. "FCT Police Command list, July 2022"
+    verifiedAt: timestamp('verified_at', { withTimezone: true }), // set when someone has called the number and confirmed it
     isActive: boolean('is_active').notNull().default(true),
     createdAt: createdAt(),
 })

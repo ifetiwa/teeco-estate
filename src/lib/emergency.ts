@@ -56,24 +56,28 @@ export function formatDialNumber (n: string): string {
     return formatNigerianPhone(n)
 }
 
+/** Where people raising or handling an alert land in the app. */
+export const SECURITY_HOME = (estateId: string) => `/security/${estateId}`
+const PLATFORM_EMERGENCIES = '/platform#emergencies'
+
 // ---------- Police stations (platform-wide) ----------
 
 const coordinate = (min: number, max: number, what: string) => z.coerce.number({ message: `Enter the ${what}` })
     .refine(v => Number.isFinite(v) && v >= min && v <= max, `Enter a valid ${what}`)
 
-const dialNumber = z.string().refine(v => normalizeDialNumber(v), 'Enter a phone number, e.g. 08031234567')
-    .transform(v => normalizeDialNumber(v)!)
-
 export const policeStationSchema = z.object({
     name: z.string().trim().min(3, 'Enter the station name').max(120),
     area: z.string().trim().max(80).default(''),
     address: z.string().trim().max(200).default(''),
-    phone: dialNumber,
+    phone: z.string().optional().transform(v => v?.trim() || undefined)
+        .refine(v => !v || normalizeDialNumber(v), 'Enter a phone number, e.g. 08031234567')
+        .transform(v => (v ? normalizeDialNumber(v)! : undefined)),
     altPhone: z.string().optional().transform(v => v?.trim() || undefined)
         .refine(v => !v || normalizeDialNumber(v), 'Enter a valid phone number')
         .transform(v => (v ? normalizeDialNumber(v)! : undefined)),
     latitude: coordinate(4, 14, 'latitude'),
     longitude: coordinate(2.5, 15, 'longitude'),
+    source: z.string().trim().max(200).optional().transform(v => v || undefined),
 })
 
 export async function addPoliceStation (actor: Actor, input: z.input<typeof policeStationSchema>): Promise<PoliceStation> {
@@ -88,18 +92,41 @@ export async function setPoliceStationActive (actor: Actor, stationId: string, i
     await getDb().update(policeStations).set({ isActive }).where(eq(policeStations.id, stationId))
 }
 
+/** Records that someone called the station's number and it was answered by the station (or clears that). */
+export async function setPoliceStationVerified (actor: Actor, stationId: string, verified: boolean): Promise<void> {
+    requirePlatformAdmin(actor)
+    await getDb().update(policeStations).set({ verifiedAt: verified ? new Date() : null }).where(eq(policeStations.id, stationId))
+}
+
 export async function listPoliceStations (actor: Actor): Promise<PoliceStation[]> {
     requirePlatformAdmin(actor)
     return getDb().select().from(policeStations).orderBy(desc(policeStations.isActive), asc(policeStations.name))
 }
 
+export type StationWithDistance = PoliceStation & { distanceKm: number | null, isEstateDivision?: boolean }
+
 /** Active stations closest to a point, nearest first. */
-export async function nearestPoliceStations (lat: number, lng: number, limit: number = NEAREST_STATIONS_SHOWN) {
+export async function nearestPoliceStations (lat: number, lng: number, limit: number = NEAREST_STATIONS_SHOWN): Promise<StationWithDistance[]> {
     const all = await getDb().select().from(policeStations).where(eq(policeStations.isActive, true))
     return all
         .map(s => ({ ...s, distanceKm: distanceKm({ lat, lng }, { lat: s.latitude, lng: s.longitude }) }))
         .sort((a, b) => a.distanceKm - b.distanceKm)
         .slice(0, limit)
+}
+
+/**
+ * The stations to call for an alert: the estate's own division first (whatever the distance), then the nearest
+ * others to the alert's position, up to NEAREST_STATIONS_SHOWN in all.
+ */
+export async function stationsForAlert (estateStationId: string | null, pos: { lat: number, lng: number } | null): Promise<StationWithDistance[]> {
+    const own = estateStationId
+        ? (await getDb().select().from(policeStations).where(and(eq(policeStations.id, estateStationId), eq(policeStations.isActive, true))))[0]
+        : undefined
+    const nearby = pos ? await nearestPoliceStations(pos.lat, pos.lng, NEAREST_STATIONS_SHOWN + 1) : []
+    const out: StationWithDistance[] = []
+    if (own) out.push({ ...own, isEstateDivision: true, distanceKm: pos ? distanceKm(pos, { lat: own.latitude, lng: own.longitude }) : null })
+    for (const s of nearby) if (s.id !== own?.id && out.length < NEAREST_STATIONS_SHOWN) out.push(s)
+    return out
 }
 
 // ---------- Estate location ----------
@@ -118,13 +145,57 @@ export const estateLocationSchema = z.object({
     return { latitude: lat, longitude: lng }
 })
 
-/** The estate's map position, used for alerts sent without a GPS fix. */
-export async function setEstateLocation (actor: Actor, estateId: string, input: z.input<typeof estateLocationSchema>): Promise<void> {
+/**
+ * The estate's map position, used for alerts sent without a GPS fix. If the estate has no police division yet,
+ * the nearest one is linked; returns the linked station.
+ */
+export async function setEstateLocation (actor: Actor, estateId: string, input: z.input<typeof estateLocationSchema>): Promise<PoliceStation | null> {
     const data = estateLocationSchema.parse(input)
+    const nearest = data.latitude !== null ? (await nearestPoliceStations(data.latitude, data.longitude!, 1))[0] : undefined
+    return withDbContext({ estateId, userId: actor.userId }, async (tx) => {
+        await requireCapability(tx, actor, estateId, 'estate.manage')
+        const [current] = await tx.select({ stationId: estates.policeStationId }).from(estates).where(eq(estates.id, estateId))
+        const link = !current?.stationId && nearest ? { policeStationId: nearest.id } : {}
+        await tx.update(estates).set({ ...data, ...link }).where(eq(estates.id, estateId))
+        const stationId = current?.stationId ?? nearest?.id
+        if (!stationId) return null
+        const [s] = await getDb().select().from(policeStations).where(eq(policeStations.id, stationId))
+        return s ?? null
+    })
+}
+
+/** An admin picks the police division that covers the estate (or clears it). */
+export async function setEstatePoliceStation (actor: Actor, estateId: string, stationId: string | null): Promise<void> {
+    if (stationId) {
+        const [s] = await getDb().select({ id: policeStations.id }).from(policeStations).where(eq(policeStations.id, stationId))
+        if (!s) throw new NotFoundError('Police station')
+    }
     await withDbContext({ estateId, userId: actor.userId }, async (tx) => {
         await requireCapability(tx, actor, estateId, 'estate.manage')
-        await tx.update(estates).set(data).where(eq(estates.id, estateId))
+        await tx.update(estates).set({ policeStationId: stationId }).where(eq(estates.id, estateId))
+        await recordAudit(tx, { estateId, actorUserId: actor.userId, action: 'estate.police_station_set', details: { stationId } })
     })
+}
+
+/** The estate's police division, and every active station ordered by distance from the estate (for the picker). */
+export async function getEstatePolice (actor: Actor, estateId: string) {
+    const estate = await withDbContext({ estateId, userId: actor.userId }, async (tx) => {
+        await requireCapability(tx, actor, estateId, 'estate.view')
+        const [e] = await tx.select({ lat: estates.latitude, lng: estates.longitude, stationId: estates.policeStationId }).from(estates).where(eq(estates.id, estateId))
+        if (!e) throw new NotFoundError('Estate')
+        return e
+    })
+    const all = await getDb().select().from(policeStations).where(eq(policeStations.isActive, true)).orderBy(asc(policeStations.name))
+    const pos = estate.lat !== null && estate.lng !== null ? { lat: estate.lat, lng: estate.lng } : null
+    const options: StationWithDistance[] = all
+        .map(s => ({ ...s, distanceKm: pos ? distanceKm(pos, { lat: s.latitude, lng: s.longitude }) : null }))
+        .sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0))
+    return {
+        station: options.find(s => s.id === estate.stationId) ?? null,
+        options,
+        hasLocation: pos !== null,
+        emergencyLines: EMERGENCY_LINES,
+    }
 }
 
 // ---------- Distress alerts ----------
@@ -140,7 +211,7 @@ async function alertContext (tx: Queryable, estateId: string, unitId: string) {
     const [row] = await tx.select({
         unitLabel: units.label, zoneName: zones.name,
         estateName: estates.name, district: estates.district, city: estates.city, state: estates.state,
-        estateLat: estates.latitude, estateLng: estates.longitude,
+        estateLat: estates.latitude, estateLng: estates.longitude, policeStationId: estates.policeStationId,
     }).from(units)
         .innerJoin(zones, eq(zones.id, units.zoneId)).innerJoin(estates, eq(estates.id, units.estateId))
         .where(and(eq(units.id, unitId), eq(units.estateId, estateId)))
@@ -154,38 +225,62 @@ export function alertPosition (alert: Pick<DistressAlert, 'latitude' | 'longitud
     return alert.latitude !== null && alert.longitude !== null ? { lat: alert.latitude, lng: alert.longitude } : null
 }
 
-interface Recipient { userId: string | null, phone: string, isStaff: boolean }
+/**
+ * Who hears about an alert, and how much they are told:
+ * - `security`: the estate's guards and estate admins. They get the house, address, caller and map link.
+ * - `platform`: Teeco super admins (platform admins), for every estate. Same details as security.
+ * - `resident`: everyone else in the estate (residents, finance officers). They are told there is an emergency
+ *   and to stay alert, never where it is.
+ */
+type Audience = 'security' | 'platform' | 'resident'
+interface Recipient { userId: string | null, phone: string, audience: Audience }
 
-/** Everyone in the estate who should hear about an alert: active staff, then current residents (deduplicated by phone). */
+const RESPONDER_ROLES = ['guard', 'estate_admin'] as const
+
+/** Everyone who should hear about an alert in this estate, deduplicated by phone (the most-informed role wins). */
 async function estateRecipients (tx: Queryable, estateId: string): Promise<Recipient[]> {
-    const [staff, residents] = await inOrder([
-        tx.selectDistinct({ userId: users.id, phone: users.phone }).from(memberships)
+    const [staff, residents, platform] = await inOrder([
+        tx.selectDistinct({ userId: users.id, phone: users.phone, role: memberships.role }).from(memberships)
             .innerJoin(users, eq(users.id, memberships.userId))
             .where(and(eq(memberships.estateId, estateId), eq(memberships.isActive, true))),
         tx.select({ userId: occupancies.userId, phone: occupancies.phone }).from(occupancies)
             .where(and(eq(occupancies.estateId, estateId), eq(occupancies.status, 'active'))),
+        tx.select({ userId: users.id, phone: users.phone }).from(users).where(eq(users.isPlatformAdmin, true)),
     ])
     const byPhone = new Map<string, Recipient>()
-    for (const s of staff) byPhone.set(s.phone, { userId: s.userId, phone: s.phone, isStaff: true })
-    for (const r of residents) if (!byPhone.has(r.phone)) byPhone.set(r.phone, { userId: r.userId, phone: r.phone, isStaff: false })
+    for (const s of staff) {
+        if ((RESPONDER_ROLES as readonly string[]).includes(s.role)) byPhone.set(s.phone, { userId: s.userId, phone: s.phone, audience: 'security' })
+    }
+    for (const p of platform) if (!byPhone.has(p.phone)) byPhone.set(p.phone, { userId: p.userId, phone: p.phone, audience: 'platform' })
+    for (const s of staff) if (!byPhone.has(s.phone)) byPhone.set(s.phone, { userId: s.userId, phone: s.phone, audience: 'resident' })
+    for (const r of residents) if (!byPhone.has(r.phone)) byPhone.set(r.phone, { userId: r.userId, phone: r.phone, audience: 'resident' })
     return [...byPhone.values()]
 }
 
-async function notifyInApp (tx: Queryable, estateId: string, recipients: Recipient[], n: { type: string, title: string, body: string, staffLink: string, residentLink: string }) {
+const isResponder = (r: Recipient) => r.audience !== 'resident'
+
+type Message = { title: string, body: string }
+
+/** In-app notifications with the wording for each audience (responders see where; residents don't). */
+async function notifyInApp (tx: Queryable, estateId: string, recipients: Recipient[], type: string, forResponders: Message, forResidents: Message | null) {
     const seen = new Set<string>()
     const rows = []
     for (const r of recipients) {
         if (!r.userId || seen.has(r.userId)) continue
+        const m = isResponder(r) ? forResponders : forResidents
+        if (!m) continue
         seen.add(r.userId)
-        rows.push({ estateId, userId: r.userId, type: n.type, title: n.title, body: n.body, link: r.isStaff ? n.staffLink : n.residentLink })
+        const link = r.audience === 'security' ? SECURITY_HOME(estateId) : r.audience === 'platform' ? PLATFORM_EMERGENCIES : '/app'
+        rows.push({ estateId, userId: r.userId, type, title: m.title, body: m.body, link })
     }
     if (rows.length) await tx.insert(notifications).values(rows)
 }
 
 /**
- * A resident presses the emergency button. Every staff member and resident of the estate is told in-app and by SMS;
- * guards and estate staff get the house, address, the caller's phone and a Google Maps link to the GPS position.
- * Pressing again while an alert for the house is open returns that alert instead of texting everyone again.
+ * A resident presses the emergency button. Everyone in the estate is told in-app and by SMS, plus Teeco's super admins.
+ * Only the estate's security team, estate admins and super admins get the house, address, caller's phone and a
+ * Google Maps link; other residents are told to stay alert without being told where. Pressing again while an alert
+ * for the house is open returns that alert instead of texting everyone again.
  */
 export async function raiseDistress (actor: Actor, estateId: string, input: z.input<typeof raiseDistressSchema>, now: Date = new Date()): Promise<{ alert: DistressAlert, reused: boolean }> {
     const data = raiseDistressSchema.parse(input)
@@ -236,18 +331,14 @@ export async function raiseDistress (actor: Actor, estateId: string, input: z.in
             ? googleMapsLink(position.latitude, position.longitude!) + (gps ? '' : ' (estate location, no GPS)')
             : googleMapsSearchLink(ctx.address)
         const caller = `${me.name || 'Resident'} ${formatNigerianPhone(me.phone)}`
-        await notifyInApp(tx, estateId, recipients, {
-            type: 'emergency.raised',
-            title: `EMERGENCY at ${ctx.house}`,
-            body: `${caller} pressed the emergency button at ${formatTime(now)}. Security has been alerted.`,
-            staffLink: `/gate/${estateId}`,
-            residentLink: '/app',
-        })
+        await notifyInApp(tx, estateId, recipients, 'emergency.raised',
+            { title: `EMERGENCY at ${ctx.house}, ${ctx.estateName}`, body: `${caller} pressed the emergency button at ${formatTime(now)}. Address: ${ctx.address}.` },
+            { title: `Emergency alert in ${ctx.estateName}`, body: 'A resident has raised an emergency. Security is responding. Stay indoors and keep your gate locked.' })
         pending = recipients.map(r => ({
             to: r.phone,
-            body: r.isStaff
+            body: isResponder(r)
                 ? `EMERGENCY ${ctx.estateName}: ${ctx.house}. Caller ${caller}. Address: ${ctx.address}. Map: ${where}`
-                : `EMERGENCY ${ctx.estateName}: alert raised at ${ctx.house}. Security has been told. Stay safe and keep your gate locked.`,
+                : `EMERGENCY ${ctx.estateName}: a resident has raised an alert. Security is responding. Stay indoors and keep your gate locked.`,
         }))
         await recordAudit(tx, {
             estateId, actorUserId: actor.userId, action: 'emergency.raised', entityType: 'distress_alert', entityId: alert.id,
@@ -279,7 +370,7 @@ export async function getDistressForResident (actor: Actor, estateId: string, al
         house: ctx.house,
         address: ctx.address,
         mapLink: pos ? googleMapsLink(pos.lat, pos.lng) : googleMapsSearchLink(ctx.address),
-        stations: pos ? await nearestPoliceStations(pos.lat, pos.lng) : [],
+        stations: await stationsForAlert(ctx.policeStationId, pos),
         emergencyLines: EMERGENCY_LINES,
     }
 }
@@ -288,7 +379,7 @@ async function staffAndUnitRecipients (tx: Queryable, estateId: string, unitId: 
     const all = await estateRecipients(tx, estateId)
     const unitPhones = new Set((await tx.select({ phone: occupancies.phone }).from(occupancies)
         .where(and(eq(occupancies.unitId, unitId), eq(occupancies.status, 'active')))).map(r => r.phone))
-    return { staff: all.filter(r => r.isStaff), unit: all.filter(r => unitPhones.has(r.phone)), everyone: all }
+    return { responders: all.filter(isResponder), unit: all.filter(r => unitPhones.has(r.phone)), everyone: all }
 }
 
 /** The resident cancels (false alarm). Staff are told by SMS so nobody keeps searching. */
@@ -302,12 +393,11 @@ export async function cancelDistress (actor: Actor, estateId: string, alertId: s
         await tx.update(distressAlerts).set({ status: 'false_alarm', closedBy: actor.userId, closedAt: new Date(), closingNote: 'Cancelled by resident' })
             .where(eq(distressAlerts.id, alertId))
         const ctx = await alertContext(tx, estateId, a.unitId)
-        const { staff, everyone } = await staffAndUnitRecipients(tx, estateId, a.unitId)
-        await notifyInApp(tx, estateId, everyone.filter(r => r.userId !== actor.userId), {
-            type: 'emergency.cancelled', title: `Alert at ${ctx.house} cancelled`, body: 'The resident says it was a false alarm.',
-            staffLink: `/gate/${estateId}`, residentLink: '/app',
-        })
-        pending = staff.map(r => ({ to: r.phone, body: `${ctx.estateName}: the emergency alert at ${ctx.house} was cancelled by the resident (false alarm).` }))
+        const { responders, everyone } = await staffAndUnitRecipients(tx, estateId, a.unitId)
+        await notifyInApp(tx, estateId, everyone.filter(r => r.userId !== actor.userId), 'emergency.cancelled',
+            { title: `Alert at ${ctx.house} cancelled`, body: 'The resident says it was a false alarm.' },
+            { title: `Emergency alert in ${ctx.estateName} ended`, body: 'It was a false alarm.' })
+        pending = responders.map(r => ({ to: r.phone, body: `${ctx.estateName}: the emergency alert at ${ctx.house} was cancelled by the resident (false alarm).` }))
         await recordAudit(tx, { estateId, actorUserId: actor.userId, action: 'emergency.cancelled', entityType: 'distress_alert', entityId: alertId })
     })
     await sendPendingSms(pending)
@@ -325,7 +415,7 @@ export async function acknowledgeDistress (actor: Actor, estateId: string, alert
         const ctx = await alertContext(tx, estateId, a.unitId)
         const { unit } = await staffAndUnitRecipients(tx, estateId, a.unitId)
         const body = `${me.name || 'Estate security'} is responding to your alert at ${ctx.house}.`
-        await notifyInApp(tx, estateId, unit, { type: 'emergency.acknowledged', title: 'Security is on the way', body, staffLink: `/gate/${estateId}`, residentLink: '/app' })
+        await notifyInApp(tx, estateId, unit, 'emergency.acknowledged', { title: 'Security is on the way', body }, { title: 'Security is on the way', body })
         pending = unit.map(r => ({ to: r.phone, body: `${ctx.estateName}: ${body}` }))
         await recordAudit(tx, { estateId, actorUserId: actor.userId, action: 'emergency.acknowledged', entityType: 'distress_alert', entityId: alertId })
     })
@@ -345,9 +435,9 @@ export async function resolveDistress (actor: Actor, estateId: string, alertId: 
         }).where(eq(distressAlerts.id, alertId))
         const ctx = await alertContext(tx, estateId, a.unitId)
         const { everyone } = await staffAndUnitRecipients(tx, estateId, a.unitId)
-        await notifyInApp(tx, estateId, everyone.filter(r => r.userId !== actor.userId), {
-            type: 'emergency.resolved', title: `Alert at ${ctx.house} closed`, body: why.slice(0, 200), staffLink: `/estate/${estateId}/emergencies`, residentLink: '/app',
-        })
+        await notifyInApp(tx, estateId, everyone.filter(r => r.userId !== actor.userId), 'emergency.resolved',
+            { title: `Alert at ${ctx.house} closed`, body: why.slice(0, 200) },
+            { title: `Emergency alert in ${ctx.estateName} ended`, body: 'Security has dealt with it.' })
         await recordAudit(tx, { estateId, actorUserId: actor.userId, action: falseAlarm ? 'emergency.false_alarm' : 'emergency.resolved', entityType: 'distress_alert', entityId: alertId, details: { note: why } })
     })
 }
@@ -409,5 +499,26 @@ export async function getOpenAlertForUnit (actor: Actor, estateId: string, unitI
         const [a] = await tx.select().from(distressAlerts)
             .where(and(eq(distressAlerts.unitId, unitId), inArray(distressAlerts.status, ['active', 'acknowledged'])))
         return a ?? null
+    })
+}
+
+/**
+ * Alerts across every estate for Teeco super admins: open ones first, then the latest closed. Super admins are
+ * among the people who receive SOS details, so this includes the house, caller and map link.
+ */
+export async function listPlatformAlerts (actor: Actor, limit = 50) {
+    requirePlatformAdmin(actor)
+    return withDbContext({ system: true, userId: actor.userId }, async (tx) => {
+        const rows = await tx.select({ ...alertColumns, estateName: estates.name, district: estates.district, city: estates.city, state: estates.state })
+            .from(distressAlerts)
+            .innerJoin(units, eq(units.id, distressAlerts.unitId)).innerJoin(zones, eq(zones.id, units.zoneId))
+            .innerJoin(users, eq(users.id, distressAlerts.raisedBy)).innerJoin(estates, eq(estates.id, distressAlerts.estateId))
+            .orderBy(sql`${distressAlerts.status} in ('active', 'acknowledged') desc`, desc(distressAlerts.createdAt))
+            .limit(limit)
+        return rows.map(r => {
+            const address = formatAddress({ houseOrBlock: r.unitLabel, street: r.zoneName, estate: r.estateName, district: r.district || undefined, city: r.city, state: r.state })
+            const pos = alertPosition(r.alert)
+            return { ...r, address, mapLink: pos ? googleMapsLink(pos.lat, pos.lng) : googleMapsSearchLink(address) }
+        })
     })
 }

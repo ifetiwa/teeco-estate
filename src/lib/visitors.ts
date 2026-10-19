@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { type EstateSettings, resolveEstateSettings } from '@/config/defaults'
 import { type Queryable, type Tx, inOrder, withDbContext } from '@/db'
-import { blockedVisitors, estates, gateCodeAttempts, occupancies, units, visitorPasses, visits, zones } from '@/db/schema'
+import { blockedVisitors, estates, gateCodeAttempts, memberships, notifications, occupancies, units, visitorPasses, visits, zones } from '@/db/schema'
 import { type Actor, type EstateAccess, getEstateAccess, requireCapability } from '@/lib/access'
 import { recordAudit } from '@/lib/audit'
 import { randomDigits } from '@/lib/crypto'
@@ -54,6 +54,20 @@ async function findBlock (tx: Queryable, estateId: string, name: string, phone: 
     const [b] = await tx.select().from(blockedVisitors)
         .where(and(eq(blockedVisitors.estateId, estateId), eq(blockedVisitors.isActive, true), or(...conds))).limit(1)
     return b ?? null
+}
+
+/** In-app update for the estate's security team (active guards), e.g. an expected visitor or a resident's answer at the gate. */
+async function notifyGuards (tx: Queryable, estateId: string, n: { type: string, title: string, body: string }) {
+    const guards = await tx.selectDistinct({ userId: memberships.userId }).from(memberships)
+        .where(and(eq(memberships.estateId, estateId), eq(memberships.role, 'guard'), eq(memberships.isActive, true)))
+    if (guards.length) {
+        await tx.insert(notifications).values(guards.map(g => ({ estateId, userId: g.userId, ...n, link: `/security/${estateId}` })))
+    }
+}
+
+async function houseLabel (tx: Queryable, unitId: string): Promise<string> {
+    const [u] = await tx.select({ label: units.label, zoneName: zones.name }).from(units).innerJoin(zones, eq(zones.id, units.zoneId)).where(eq(units.id, unitId))
+    return u ? `${u.label}, ${u.zoneName}` : 'a house'
 }
 
 function requireResidentOf (access: EstateAccess, unitId: string) {
@@ -116,6 +130,11 @@ export async function createPass (actor: Actor, estateId: string, input: z.input
                     validFrom: data.validFrom,
                     validUntil: data.validUntil,
                 }).returning()
+                await notifyGuards(tx, estateId, {
+                    type: 'visitor.expected',
+                    title: `Expected visitor: ${pass.visitorName}`,
+                    body: `For ${await houseLabel(tx, pass.unitId)}, ${formatDateTime(pass.validFrom)} to ${formatDateTime(pass.validUntil)}${pass.vehiclePlate ? `, vehicle ${pass.vehiclePlate}` : ''}.`,
+                })
                 return pass
             })
         } catch (e) {
@@ -368,6 +387,11 @@ export async function decideWalkIn (actor: Actor, estateId: string, visitId: str
         const [row] = await tx.update(visits).set({
             status: approve ? 'approved' : 'declined', decidedBy: actor.userId, decidedAt: new Date(), note: note?.trim().slice(0, 300) || null,
         }).where(eq(visits.id, visitId)).returning()
+        await notifyGuards(tx, estateId, {
+            type: approve ? 'visitor.walk_in_approved' : 'visitor.walk_in_declined',
+            title: approve ? `Let in: ${row.visitorName}` : `Do not admit: ${row.visitorName}`,
+            body: `${approve ? 'Approved' : 'Declined'} by the resident of ${await houseLabel(tx, row.unitId)} (gate ${row.gate}).${row.note ? ` ${row.note}` : ''}`,
+        })
         return row
     })
 }

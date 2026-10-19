@@ -59,7 +59,7 @@ export default async function GatePage ({ params }: { params: Promise<{ estateId
                         <p className='text-sm text-brand-100'>Gate console</p>
                         <h1 className='text-xl font-bold'>{estate.name} gate</h1>
                     </div>
-                    {access.capabilities.has('estate.manage') && <Link href={`/estate/${estate.id}`} className='rounded-lg bg-white/15 px-3 py-2 text-sm font-semibold hover:bg-white/25'>Estate admin</Link>}
+                    {canRespond && <Link href={`/security/${estate.id}`} className='rounded-lg bg-white/15 px-3 py-2 text-sm font-semibold hover:bg-white/25'>Security dashboard</Link>}
                 </div>
             </div>
             <main className='mx-auto max-w-lg space-y-5 px-4 py-5'>

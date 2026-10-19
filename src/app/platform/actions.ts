@@ -7,7 +7,7 @@ import { actorFromUser } from '@/lib/access'
 
 import { type ActionState, formObject, runAction, toActionError } from '@/lib/actions'
 import { requireUser } from '@/lib/auth/current'
-import { addPoliceStation, setPoliceStationActive } from '@/lib/emergency'
+import { addPoliceStation, setPoliceStationActive, setPoliceStationVerified } from '@/lib/emergency'
 import { createEstate } from '@/lib/estates'
 import { grantSupportAccess } from '@/lib/support'
 
@@ -45,5 +45,14 @@ export async function setPoliceStationActiveAction (stationId: string, isActive:
         await setPoliceStationActive(actorFromUser(user), stationId, isActive)
         revalidatePath('/platform')
         return isActive ? 'Station shown on alerts again.' : 'Station hidden from alerts.'
+    })
+}
+
+export async function setPoliceStationVerifiedAction (stationId: string, verified: boolean, _: ActionState): Promise<ActionState> {
+    const user = await requireUser()
+    return runAction(async () => {
+        await setPoliceStationVerified(actorFromUser(user), stationId, verified)
+        revalidatePath('/platform')
+        return verified ? 'Marked as confirmed by phone.' : 'Marked as not confirmed.'
     })
 }

@@ -20,6 +20,7 @@ export default async function EstateLayout ({ children, params }: { children: Re
         { href: `${base}/payments`, label: 'Payments', icon: 'payments', show: can('finance.read') },
         { href: `${base}/visitors`, label: 'Visitors', icon: 'visitors', show: can('visitors.read') },
         { href: `${base}/emergencies`, label: 'Emergencies', icon: 'emergencies', show: can('emergency.read') },
+        { href: `/security/${estate.id}`, label: 'Security', icon: 'security', show: can('emergency.respond') },
         { href: `/gate/${estate.id}`, label: 'Gate', icon: 'gate', show: can('gate.operate') },
         { href: `${base}/staff`, label: 'Staff', icon: 'staff', show: can('staff.manage') },
         { href: `${base}/settings`, label: 'Settings', icon: 'settings', show: can('estate.manage') || can('audit.read') },

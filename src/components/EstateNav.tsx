@@ -1,6 +1,6 @@
 'use client'
 
-import { DoorOpen, LayoutDashboard, MapPin, Receipt, ScrollText, Settings, Siren, UserCog, Users } from 'lucide-react'
+import { DoorOpen, LayoutDashboard, MapPin, Receipt, ScrollText, Settings, ShieldCheck, Siren, UserCog, Users } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -11,6 +11,7 @@ const ICONS = {
     visitors: ScrollText,
     payments: Receipt,
     emergencies: Siren,
+    security: ShieldCheck,
     gate: DoorOpen,
     staff: UserCog,
     settings: Settings,
