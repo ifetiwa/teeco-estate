@@ -1,0 +1,15 @@
+{
+  "appId": "ng.teeco.estate",
+  "appName": "Teeco Estate",
+  "webDir": "www",
+  "server": {
+    "url": "https://teeco-estate.vercel.app/app",
+    "androidScheme": "https",
+    "cleartext": false,
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#0f5132"
+  }
+}

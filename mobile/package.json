@@ -1,0 +1,19 @@
+{
+  "name": "teeco-estate-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Android app (APK) for Teeco Estate: a thin wrapper that opens the live web app",
+  "license": "UNLICENSED",
+  "scripts": {
+    "icons": "node scripts/make-icons.mjs",
+    "android:prepare": "cap add android && capacitor-assets generate --android && node scripts/patch-android.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "8.5.3"
+  }
+}
