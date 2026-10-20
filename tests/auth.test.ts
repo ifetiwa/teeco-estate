@@ -24,7 +24,7 @@ describe('phone OTP sign-in', () => {
         const { phone } = await requestOtp(local)
         expect(phone).toBe('+2348035550001')
         const msg = sms.lastTo(phone)!
-        expect(msg.body).toMatch(/^\d{6} is your Teeco Estate code/)
+        expect(msg.body).toMatch(/^\d{6} is your MyEstateapp code/)
 
         const first = await verifyOtp(local, codeFrom(msg.body))
         expect(first.isNewUser).toBe(true)

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { CopyButton } from '@/components/CopyButton'
 import { PoliceContacts } from '@/components/PoliceContacts'
 import { Badge, EmptyState, PageHeader, SectionCard, StatCard, VISIT_STATUS_TONE } from '@/components/ui'
+import { BRAND } from '@/config/brand'
 import { getEstatePolice, listOpenAlerts } from '@/lib/emergency'
 import { formatDateTime, formatNaira } from '@/lib/format'
 import { listPayments } from '@/lib/levies'
@@ -82,7 +83,7 @@ export default async function EstateOverview ({ params }: { params: Promise<{ es
                     <SectionCard title='Invite residents' description='Residents sign in with their phone, enter this code, and you approve them.' icon={KeyRound}>
                         <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl bg-brand-50 p-4'>
                             <p className='font-mono text-3xl font-bold tracking-[0.3em] text-brand-800'>{estate.joinCode}</p>
-                            <CopyButton text={`Join ${estate.name} on Teeco Estate: sign in with your phone and enter join code ${estate.joinCode}.`} label='Copy invite' />
+                            <CopyButton text={`Join ${estate.name} on ${BRAND.productName}: sign in with your phone and enter join code ${estate.joinCode}.`} label='Copy invite' />
                         </div>
                     </SectionCard>
                 )}
