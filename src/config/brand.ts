@@ -1,6 +1,6 @@
-// Single place for product naming and branding. "Teeco Estate" is a working name (docs/DECISIONS.md).
+// Single place for product naming and branding. "MyEstateapp" is the product name (docs/DECISIONS.md).
 export const BRAND = {
-    productName: 'Teeco Estate',
+    productName: 'MyEstateapp',
     legalName: 'Teeco Enterprise Limited',
     rcNumber: 'RC 8211994',
     supportEmail: 'support@teeco.example',

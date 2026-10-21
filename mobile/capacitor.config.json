@@ -1,6 +1,6 @@
 {
   "appId": "ng.teeco.estate",
-  "appName": "Teeco Estate",
+  "appName": "MyEstateapp",
   "webDir": "www",
   "server": {
     "url": "https://teeco-estate.vercel.app/app",

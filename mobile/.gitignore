@@ -1,3 +1,4 @@
 node_modules/
 # Generated in CI by `npm run android:prepare`
 android/
+*.apk
