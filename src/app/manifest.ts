@@ -6,7 +6,7 @@ import { BRAND } from '@/config/brand'
 export default function manifest (): MetadataRoute.Manifest {
     return {
         name: BRAND.productName,
-        short_name: 'Teeco',
+        short_name: BRAND.productName,
         description: 'Visitor passes, levies, emergencies and notices for your estate',
         start_url: '/app',
         scope: '/',

@@ -2,7 +2,7 @@
   "name": "teeco-estate-android",
   "version": "1.0.0",
   "private": true,
-  "description": "Android app (APK) for Teeco Estate: a thin wrapper that opens the live web app",
+  "description": "Android app (APK) for MyEstateapp: a thin wrapper that opens the live web app",
   "license": "UNLICENSED",
   "scripts": {
     "icons": "node scripts/make-icons.mjs",

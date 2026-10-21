@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     title: { default: BRAND.productName, template: `%s · ${BRAND.productName}` },
     description: 'Estate management for gated estates and residents\' associations in Abuja',
     applicationName: BRAND.productName,
-    appleWebApp: { capable: true, title: 'Teeco', statusBarStyle: 'default' },
+    appleWebApp: { capable: true, title: BRAND.productName, statusBarStyle: 'default' },
 }
 
 export const viewport: Viewport = {
