@@ -11,6 +11,11 @@ const GPS_TIMEOUT_MS = 6000
 
 type Phase = 'idle' | 'holding' | 'locating' | 'sending'
 
+/** Short vibration as feedback (phones only; ignored elsewhere). */
+function buzz (pattern: number | number[]) {
+    try { navigator.vibrate?.(pattern) } catch { /* not supported */ }
+}
+
 /** Best GPS fix the phone can give within a few seconds, or null (permission denied, no signal, desktop). */
 function currentPosition (): Promise<{ latitude: number, longitude: number, accuracy: number } | null> {
     return new Promise((resolve) => {
@@ -57,6 +62,7 @@ export function DistressButton ({ occupancyId, compact = false }: { occupancyId:
         setProgress(p)
         if (p >= 1) {
             started.current = null
+            buzz([200, 100, 200])
             void fire()
             return
         }
@@ -70,6 +76,7 @@ export function DistressButton ({ occupancyId, compact = false }: { occupancyId:
         e.preventDefault()
         setError(null)
         setPhase('holding')
+        buzz(40)
         started.current = performance.now()
         frame.current = requestAnimationFrame(tick)
     }

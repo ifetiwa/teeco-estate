@@ -2,10 +2,11 @@
 
 import { CheckCircle2, Clock, DoorOpen, LogOut, ShieldAlert, ThumbsUp, UserPlus, XCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { type ReactNode, useActionState, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useActionState, useCallback, useEffect, useRef, useState } from 'react'
 
 import { ActionForm, Field, SubmitButton } from '@/components/ActionForm'
 import { PhoneInput } from '@/components/PhoneInput'
+import { QrScanner } from '@/components/QrScanner'
 
 import { type VerifyState, admitPassAction, admitWalkInAction, checkOutAction, denyPassAction, verifyCodeAction, walkInAction } from './actions'
 
@@ -35,6 +36,12 @@ export function GateConsole ({ estateId, gateCount, units, waiting, approved, de
     const [showWalkIn, setShowWalkIn] = useState(false)
     const [dismissed, setDismissed] = useState<number | undefined>()
     const codeRef = useRef<HTMLInputElement>(null)
+    const formRef = useRef<HTMLFormElement>(null)
+    // A scanned QR fills the code box and checks it straight away
+    const onScan = useCallback((text: string) => {
+        if (codeRef.current) codeRef.current.value = text
+        formRef.current?.requestSubmit()
+    }, [])
 
     useEffect(() => {
         try {
@@ -73,11 +80,12 @@ export function GateConsole ({ estateId, gateCount, units, waiting, approved, de
                 </div>
             )}
 
-            <form action={verifyAction} className='card space-y-3'>
+            <form ref={formRef} action={verifyAction} className='card space-y-3'>
                 <label htmlFor='code' className='text-base font-semibold'>Visitor code</label>
                 <input ref={codeRef} id='code' name='code' inputMode='numeric' autoComplete='off' placeholder='6-digit code' required
                     className='w-full py-4 text-center font-mono text-4xl tracking-[0.3em] placeholder:font-sans placeholder:text-xl placeholder:tracking-normal' />
                 <button type='submit' disabled={verifying} className='btn-primary w-full py-4 text-xl'>{verifying ? 'Checking…' : 'Check code'}</button>
+                <QrScanner onResult={onScan} />
                 {verify.error && <p role='alert' className='rounded-lg bg-red-50 px-3 py-2 font-medium text-red-700'>{verify.error}</p>}
             </form>
 

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { AppHeader } from '@/components/AppHeader'
+import { KeepAwake } from '@/components/KeepAwake'
 import { EmergencyPanel, type PanelAlert, toPanelAlert } from '@/components/EmergencyPanel'
 import { actorFromUser } from '@/lib/access'
 import { requireUser } from '@/lib/auth/current'
@@ -53,6 +54,7 @@ export default async function GatePage ({ params }: { params: Promise<{ estateId
     return (
         <>
             <AppHeader user={user} />
+            <KeepAwake />
             <div className='bg-gradient-to-r from-brand-800 to-brand-600 text-white'>
                 <div className='mx-auto flex max-w-lg items-center justify-between gap-3 px-4 py-4'>
                     <div>

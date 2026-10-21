@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { resolveEstateSettings } from '@/config/defaults'
 import { getDb, inOrder, withDbContext } from '@/db'
 import { estates, memberships, occupancies, units, users, zones } from '@/db/schema'
-import { type Actor, type EstateAccess, getEstateAccess, requireCapability, requirePlatformAdmin } from '@/lib/access'
+import { type Actor, type EstateAccess, type StaffRole, getEstateAccess, requireCapability, requirePlatformAdmin } from '@/lib/access'
 import { recordAudit } from '@/lib/audit'
 import { randomCode } from '@/lib/crypto'
 import { AppError, ForbiddenError, NotFoundError, isUniqueViolation } from '@/lib/errors'
@@ -200,3 +200,22 @@ export async function listAllEstates (actor: Actor, now: Date = new Date()) {
         policeStation: sql<string | null>`(select s.name from police_stations s where s.id = "estates"."police_station_id")`,
     }).from(estates).orderBy(asc(estates.name))).then(rows => rows.map(r => ({ ...r, collectedThisMonthKobo: Number(r.collectedThisMonthKobo) })))
 }
+
+/** What the mobile bottom menu needs to know about the signed-in user: staff roles per estate and current homes. */
+export async function getNavTargets (actor: Actor) {
+    const [staff, homes] = await withDbContext({ userId: actor.userId }, tx => inOrder([
+        tx.select({ estateId: memberships.estateId, role: memberships.role }).from(memberships)
+            .where(and(eq(memberships.userId, actor.userId), eq(memberships.isActive, true))),
+        tx.select({ occupancyId: occupancies.id, estateId: occupancies.estateId }).from(occupancies)
+            .where(and(eq(occupancies.userId, actor.userId), eq(occupancies.status, 'active')))
+            .orderBy(asc(occupancies.createdAt)),
+    ]))
+    const estatesById = new Map<string, StaffRole[]>()
+    for (const s of staff) estatesById.set(s.estateId, [...(estatesById.get(s.estateId) ?? []), s.role])
+    return {
+        isPlatformAdmin: actor.isPlatformAdmin,
+        estates: [...estatesById].map(([id, roles]) => ({ id, roles })),
+        homes,
+    }
+}
+export type NavTargets = Awaited<ReturnType<typeof getNavTargets>>

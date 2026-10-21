@@ -3,14 +3,19 @@ import Link from 'next/link'
 
 import { signOutAction } from '@/app/signin/actions'
 import { Logo } from '@/components/Logo'
+import { BottomNav } from '@/components/BottomNav'
 import { Avatar } from '@/components/ui'
+import { getNavTargets } from '@/lib/estates'
 import { countUnreadNotifications } from '@/lib/notifications'
 import { formatNigerianPhone } from '@/lib/phone'
 
 export async function AppHeader ({ user }: { user: { id: string, name: string, phone: string, isPlatformAdmin: boolean } }) {
-    const unread = await countUnreadNotifications({ userId: user.id, isPlatformAdmin: user.isPlatformAdmin })
+    const actor = { userId: user.id, isPlatformAdmin: user.isPlatformAdmin }
+    const [unread, navTargets] = await Promise.all([countUnreadNotifications(actor), getNavTargets(actor)])
     const display = user.name || formatNigerianPhone(user.phone)
     return (
+        <>
+        <BottomNav targets={navTargets} unread={unread} />
         <header className='sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur'>
             <div className='mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4'>
                 <Logo href='/app' />
@@ -37,5 +42,6 @@ export async function AppHeader ({ user }: { user: { id: string, name: string, p
                 </div>
             </div>
         </header>
+        </>
     )
 }

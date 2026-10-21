@@ -140,7 +140,7 @@ export default async function PlatformPage () {
                     </SectionCard>
                 </div>
 
-                <div className='grid grid-cols-1 gap-8 2xl:grid-cols-[minmax(0,1fr)_380px]'>
+                <div id='police' className='grid scroll-mt-20 grid-cols-1 gap-8 2xl:grid-cols-[minmax(0,1fr)_380px]'>
                     <section>
                         <h2 className='mb-1 flex items-center gap-2 text-lg font-semibold'><ShieldAlert className='h-5 w-5 text-red-600' aria-hidden /> Police stations</h2>
                         <p className='mb-3 text-sm text-slate-600'>

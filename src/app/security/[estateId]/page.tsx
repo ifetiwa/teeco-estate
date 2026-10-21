@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { AppHeader } from '@/components/AppHeader'
+import { KeepAwake } from '@/components/KeepAwake'
 import { AutoRefresh } from '@/components/AutoRefresh'
 import { EmergencyPanel, toPanelAlert } from '@/components/EmergencyPanel'
 import { PoliceContacts } from '@/components/PoliceContacts'
@@ -42,6 +43,7 @@ export default async function SecurityDashboard ({ params }: { params: Promise<{
         <>
             <AppHeader user={user} />
             <AutoRefresh seconds={15} />
+            <KeepAwake />
             <div className='bg-gradient-to-r from-slate-900 to-slate-700 text-white'>
                 <div className='mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-5'>
                     <div>

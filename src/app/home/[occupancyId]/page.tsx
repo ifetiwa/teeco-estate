@@ -48,6 +48,7 @@ export default async function MyHomePage ({ params }: { params: Promise<{ occupa
             <main className='mx-auto max-w-3xl space-y-6 px-4 py-6'>
                 <PageHeader back={{ href: '/app', label: 'Home' }} title={<>{home.unit.label}, {home.zone.name}</>} description={home.estateName} />
 
+                <div id='emergency' className='scroll-mt-20' />
                 {openAlert
                     ? (
                         <Link href={`/home/${occupancyId}/emergency/${openAlert.id}`} className='card flex items-center gap-3 border-red-300 bg-red-50 text-red-800'>

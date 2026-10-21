@@ -5,6 +5,7 @@ import QRCode from 'qrcode'
 
 import { AppHeader } from '@/components/AppHeader'
 import { CopyButton } from '@/components/CopyButton'
+import { SharePass } from '@/components/SharePass'
 import { LogoMark } from '@/components/Logo'
 import { PageHeader } from '@/components/ui'
 import { actorFromUser } from '@/lib/access'
@@ -61,6 +62,7 @@ export default async function PassPage ({ params }: { params: Promise<{ occupanc
                         {state === 'not_yet_valid' && <p className='mt-3 rounded-lg bg-sky-50 px-3 py-2 font-medium text-sky-700'>Not valid yet</p>}
                     </div>
                 </section>
+                {usable && <SharePass text={message} qrSvg={qrSvg} fileName={`gate-pass-${pass.code}.png`} />}
                 {usable && (
                     <section className='grid grid-cols-3 gap-2'>
                         <a href={whatsapp} target='_blank' rel='noopener noreferrer' className='btn bg-[#25D366] text-white shadow-sm hover:brightness-95'><MessageCircle className='h-4 w-4' aria-hidden />WhatsApp</a>

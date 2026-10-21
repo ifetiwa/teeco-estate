@@ -13,12 +13,14 @@ export const metadata: Metadata = {
     title: { default: BRAND.productName, template: `%s · ${BRAND.productName}` },
     description: 'Estate management for gated estates and residents\' associations in Abuja',
     applicationName: BRAND.productName,
+    appleWebApp: { capable: true, title: 'Teeco', statusBarStyle: 'default' },
 }
 
 export const viewport: Viewport = {
     themeColor: BRAND.colors.primary,
     width: 'device-width',
     initialScale: 1,
+    viewportFit: 'cover', // lets the bottom menu sit above the phone's gesture bar
 }
 
 export default function RootLayout ({ children }: { children: ReactNode }) {
