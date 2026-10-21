@@ -3,13 +3,13 @@ import { z } from 'zod'
 
 import { type EstateSettings, resolveEstateSettings } from '@/config/defaults'
 import { type Queryable, type Tx, inOrder, withDbContext } from '@/db'
-import { blockedVisitors, estates, gateCodeAttempts, memberships, notifications, occupancies, units, visitorPasses, visits, zones } from '@/db/schema'
+import { blockedVisitors, estates, gateCodeAttempts, memberships, occupancies, units, visitorPasses, visits, zones } from '@/db/schema'
 import { type Actor, type EstateAccess, getEstateAccess, requireCapability } from '@/lib/access'
 import { recordAudit } from '@/lib/audit'
 import { randomDigits } from '@/lib/crypto'
 import { AppError, ForbiddenError, NotFoundError, RateLimitError, isUniqueViolation } from '@/lib/errors'
 import { formatDateTime, isWithinDailyWindow, parseLagosDateTime, startOfLagosDay } from '@/lib/format'
-import { type PendingSms, notifyUnitResidents, sendPendingSms } from '@/lib/notifications'
+import { type PendingSms, insertNotifications, notifyUnitResidents, sendPendingSms } from '@/lib/notifications'
 import { formatNigerianPhone, normalizeNigerianPhone } from '@/lib/phone'
 import { normalizePlate } from '@/lib/residents'
 
@@ -61,7 +61,7 @@ async function notifyGuards (tx: Queryable, estateId: string, n: { type: string,
     const guards = await tx.selectDistinct({ userId: memberships.userId }).from(memberships)
         .where(and(eq(memberships.estateId, estateId), eq(memberships.role, 'guard'), eq(memberships.isActive, true)))
     if (guards.length) {
-        await tx.insert(notifications).values(guards.map(g => ({ estateId, userId: g.userId, ...n, link: `/security/${estateId}` })))
+        await insertNotifications(tx, guards.map(g => ({ estateId, userId: g.userId, ...n, link: `/security/${estateId}` })))
     }
 }
 

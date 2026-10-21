@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ActionForm, SubmitButton } from '@/components/ActionForm'
 import { AppHeader } from '@/components/AppHeader'
 import { DistressButton } from '@/components/DistressButton'
+import { PhoneSettings } from '@/components/PhoneSettings'
 import { Badge, EmptyState, SectionCard } from '@/components/ui'
 import { actorFromUser } from '@/lib/access'
 import { requireUser } from '@/lib/auth/current'
@@ -213,10 +214,13 @@ export default async function AppHome () {
                             )}
                     </SectionCard>
 
+                    <div className='space-y-6'>
+                    <PhoneSettings />
                     <SectionCard title='Join an estate' icon={UserPlus}>
                         <p className='text-sm text-slate-600'>Moving in? Ask your estate office for the 6-character join code.</p>
                         <Link href='/join' className='btn-primary mt-4 w-full'><KeyRound className='h-4 w-4' aria-hidden /> Join an estate</Link>
                     </SectionCard>
+                    </div>
                 </div>
             </main>
         </>

@@ -64,6 +64,13 @@
       "when": 1792435951821,
       "tag": "0008_abuja_police_stations",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792585835087,
+      "tag": "0009_push_devices",
+      "breakpoints": true
     }
   ]
 }

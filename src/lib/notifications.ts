@@ -1,8 +1,9 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 
-import { type Queryable, withDbContext } from '@/db'
+import { type Queryable, afterCommit, withDbContext } from '@/db'
 import { notifications, occupancies } from '@/db/schema'
 import { type Actor } from '@/lib/access'
+import { sendPush } from '@/lib/push'
 import { getSmsProvider } from '@/lib/sms'
 
 export interface NotificationInput {
@@ -11,6 +12,20 @@ export interface NotificationInput {
     title: string
     body: string
     link?: string
+}
+
+export type NewNotification = typeof notifications.$inferInsert
+
+/**
+ * Saves in-app notifications and, once the transaction commits, pushes each one to the recipient's phones.
+ * Every notification in the app goes through here.
+ */
+export async function insertNotifications (tx: Queryable, rows: NewNotification[]): Promise<void> {
+    if (rows.length === 0) return
+    await tx.insert(notifications).values(rows)
+    afterCommit(tx, () => sendPush(rows.map(r => ({
+        userId: r.userId, title: r.title, body: r.body, link: r.link, urgent: r.type === 'emergency.raised',
+    }))))
 }
 
 export interface PendingSms {
@@ -28,7 +43,7 @@ export async function notifyUnitResidents (tx: Queryable, unitId: string, n: Not
         .where(and(eq(occupancies.unitId, unitId), eq(occupancies.status, 'active')))
     const withAccounts = residents.filter((r): r is { userId: string, phone: string } => r.userId !== null)
     if (withAccounts.length) {
-        await tx.insert(notifications).values(withAccounts.map(r => ({
+        await insertNotifications(tx, withAccounts.map(r => ({
             estateId: n.estateId, userId: r.userId, type: n.type, title: n.title, body: n.body, link: n.link,
         })))
     }
@@ -54,4 +69,10 @@ export async function countUnreadNotifications (actor: Actor): Promise<number> {
 export async function markAllNotificationsRead (actor: Actor): Promise<void> {
     await withDbContext({ userId: actor.userId }, tx =>
         tx.update(notifications).set({ readAt: new Date() }).where(and(eq(notifications.userId, actor.userId), isNull(notifications.readAt))))
+}
+
+export async function markNotificationRead (actor: Actor, notificationId: string): Promise<void> {
+    await withDbContext({ userId: actor.userId }, tx =>
+        tx.update(notifications).set({ readAt: new Date() })
+            .where(and(eq(notifications.id, notificationId), eq(notifications.userId, actor.userId), isNull(notifications.readAt))))
 }

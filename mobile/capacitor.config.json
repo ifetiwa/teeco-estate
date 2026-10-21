@@ -11,5 +11,15 @@
   "android": {
     "allowMixedContent": false,
     "backgroundColor": "#0f5132"
+  },
+  "appendUserAgent": "MyEstateappAndroid",
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
+    }
   }
 }

@@ -2,13 +2,14 @@
 // - location permission, so the emergency button can share the phone's GPS position
 // - camera, for scanning visitors' QR codes at the gate
 // - vibration, for the alarm on the security dashboard and the emergency button
+// - notifications (Android 13+) for push alerts, and biometrics for the fingerprint lock
 // - package visibility for the dialer, SMS and WhatsApp links (Android 11+)
 // - version code/name from the environment (the CI run number), so each APK installs over the last one
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const manifestPath = 'android/app/src/main/AndroidManifest.xml'
 let manifest = readFileSync(manifestPath, 'utf8')
-const permissions = ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'CAMERA', 'VIBRATE']
+const permissions = ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'CAMERA', 'VIBRATE', 'POST_NOTIFICATIONS', 'USE_BIOMETRIC']
     .filter(p => !manifest.includes(`android.permission.${p}"`))
     .map(p => `    <uses-permission android:name="android.permission.${p}" />`)
 const queries = `

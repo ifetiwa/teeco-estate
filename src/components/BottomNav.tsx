@@ -19,7 +19,7 @@ interface Tab {
     badge?: number
 }
 
-const ALERTS = (unread: number): Tab => ({ href: '/app#notifications', label: 'Alerts', icon: Bell, badge: unread, exact: true })
+const ALERTS = (unread: number): Tab => ({ href: '/notifications', label: 'Alerts', icon: Bell, badge: unread, exact: true })
 
 function platformTabs (unread: number): Tab[] {
     return [

@@ -51,7 +51,14 @@ export async function requestOtp (rawPhone: string): Promise<{ phone: string }> 
         codeHash: hashCode(phone, code),
         expiresAt: new Date(Date.now() + OTP_TTL_MINUTES * 60_000),
     })
-    await getSmsProvider().send({ to: phone, body: `${code} is your ${BRAND.productName} code. It expires in ${OTP_TTL_MINUTES} minutes. Do not share it.` })
+    // Phones with a fixed test code (TEST_LOGIN_CODES) sign in with that code; no SMS is sent to them
+    if (testLoginCodeFor(phone)) return { phone }
+    try {
+        await getSmsProvider().send({ to: phone, body: `${code} is your ${BRAND.productName} code. It expires in ${OTP_TTL_MINUTES} minutes. Do not share it.` })
+    } catch (e) {
+        console.error('[otp] SMS failed', e)
+        throw new AppError('We could not send the code by SMS. Please check the number and try again in a minute.', 'SMS_FAILED')
+    }
     return { phone }
 }
 

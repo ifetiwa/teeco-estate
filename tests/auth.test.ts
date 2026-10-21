@@ -112,7 +112,9 @@ describe('fixed test login codes (TEST_LOGIN_CODES)', () => {
         const other = nextPhone()
         process.env.TEST_LOGIN_CODES = `${listed}:482915`
         try {
+            const sms = useConsoleSms()
             await requestOtp(listed)
+            expect(sms.lastTo(listed)).toBeUndefined() // demo numbers are never texted
             expect((await verifyOtp(listed, '482915')).isNewUser).toBe(true)
 
             await requestOtp(other)
@@ -124,5 +126,36 @@ describe('fixed test login codes (TEST_LOGIN_CODES)', () => {
         } finally {
             delete process.env.TEST_LOGIN_CODES
         }
+    })
+})
+
+describe('Termii SMS provider', () => {
+    it('posts the message in Termii\'s format and returns the message id', async () => {
+        const { TermiiSmsProvider } = await import('@/lib/sms')
+        const calls: Array<{ url: string, body: Record<string, string> }> = []
+        const fake = (async (url: string, init: RequestInit) => {
+            calls.push({ url, body: JSON.parse(String(init.body)) })
+            return new Response(JSON.stringify({ message_id: 'abc123', message: 'Successfully Sent', balance: 9 }), { status: 200 })
+        }) as unknown as typeof fetch
+        const termii = new TermiiSmsProvider({ apiKey: 'key', senderId: 'MyEstate', channel: 'dnd', baseUrl: 'https://v3.api.termii.com/' }, fake)
+        expect(await termii.send({ to: '+2348031234567', body: '123456 is your code' })).toEqual({ id: 'abc123' })
+        expect(calls[0].url).toBe('https://v3.api.termii.com/api/sms/send')
+        expect(calls[0].body).toEqual({ api_key: 'key', to: '2348031234567', from: 'MyEstate', sms: '123456 is your code', type: 'plain', channel: 'dnd' })
+    })
+
+    it('throws when Termii rejects the message, and sign-in shows a friendly error', async () => {
+        const { TermiiSmsProvider, setSmsProvider } = await import('@/lib/sms')
+        const fake = (async () => new Response(JSON.stringify({ message: 'Insufficient balance' }), { status: 400 })) as unknown as typeof fetch
+        const termii = new TermiiSmsProvider({ apiKey: 'key', senderId: 'MyEstate', channel: 'dnd', baseUrl: 'https://api.ng.termii.com' }, fake)
+        await expect(termii.send({ to: '+2348031234567', body: 'x' })).rejects.toThrow('Insufficient balance')
+        setSmsProvider(termii)
+        await expect(requestOtp(nextPhone())).rejects.toThrow('could not send the code')
+    })
+
+    it('is chosen by SMS_PROVIDER=termii, and needs its key and sender ID', async () => {
+        const { smsProviderFromEnv } = await import('@/lib/sms')
+        expect(smsProviderFromEnv({}).name).toBe('console')
+        expect(smsProviderFromEnv({ SMS_PROVIDER: 'termii', TERMII_API_KEY: 'k', TERMII_SENDER_ID: 'MyEstate' }).name).toBe('termii')
+        expect(() => smsProviderFromEnv({ SMS_PROVIDER: 'termii' })).toThrow('TERMII_API_KEY')
     })
 })

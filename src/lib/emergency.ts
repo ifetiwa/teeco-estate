@@ -3,13 +3,13 @@ import { z } from 'zod'
 
 import { EMERGENCY_LINES, MAX_ALERTS_PER_USER_PER_HOUR, NEAREST_STATIONS_SHOWN } from '@/config/emergency'
 import { type Queryable, getDb, inOrder, withDbContext } from '@/db'
-import { distressAlerts, estates, memberships, notifications, occupancies, policeStations, units, users, zones } from '@/db/schema'
+import { distressAlerts, estates, memberships, occupancies, policeStations, units, users, zones } from '@/db/schema'
 import { type Actor, getEstateAccess, requireCapability, requirePlatformAdmin } from '@/lib/access'
 import { formatAddress } from '@/lib/address'
 import { recordAudit } from '@/lib/audit'
 import { AppError, ForbiddenError, NotFoundError, RateLimitError, isUniqueViolation } from '@/lib/errors'
 import { formatTime } from '@/lib/format'
-import { type PendingSms, sendPendingSms } from '@/lib/notifications'
+import { type PendingSms, insertNotifications, sendPendingSms } from '@/lib/notifications'
 import { formatNigerianPhone } from '@/lib/phone'
 
 export type DistressAlert = typeof distressAlerts.$inferSelect
@@ -273,7 +273,7 @@ async function notifyInApp (tx: Queryable, estateId: string, recipients: Recipie
         const link = r.audience === 'security' ? SECURITY_HOME(estateId) : r.audience === 'platform' ? PLATFORM_EMERGENCIES : '/app'
         rows.push({ estateId, userId: r.userId, type, title: m.title, body: m.body, link })
     }
-    if (rows.length) await tx.insert(notifications).values(rows)
+    await insertNotifications(tx, rows)
 }
 
 /**

@@ -371,3 +371,15 @@ export const policeStations = pgTable('police_stations', {
     isActive: boolean('is_active').notNull().default(true),
     createdAt: createdAt(),
 })
+
+// ---------- Push notifications ----------
+
+/** A phone that can receive push notifications for a user (Firebase Cloud Messaging registration token). */
+export const pushDevices = pgTable('push_devices', {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    token: text('token').notNull().unique(),
+    platform: text('platform').notNull().default('android'),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+}, (t) => [index('push_devices_user_idx').on(t.userId)])

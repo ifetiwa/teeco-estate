@@ -51,13 +51,30 @@ export interface DbContext {
  * Settings are transaction-local, so pooled connections never leak context between requests.
  */
 export async function withDbContext<T> (ctx: DbContext, fn: (tx: Tx) => Promise<T>): Promise<T> {
-    return getDb().transaction(async (tx) => {
+    const hooks: Array<() => Promise<void>> = []
+    const result = await getDb().transaction(async (tx) => {
+        afterCommitHooks.set(tx, hooks)
         await tx.execute(sql`select
             set_config('app.estate_id', ${ctx.estateId ?? ''}, true),
             set_config('app.user_id', ${ctx.userId ?? ''}, true),
             set_config('app.system', ${ctx.system ? 'on' : ''}, true)`)
         return fn(tx)
     })
+    // Side effects (push notifications) only once the change is saved; their failures never undo it
+    for (const hook of hooks) await hook().catch((e: unknown) => console.error('[after-commit]', e))
+    return result
+}
+
+const afterCommitHooks = new WeakMap<Queryable, Array<() => Promise<void>>>()
+
+/**
+ * Runs fn after the withDbContext transaction that `tx` belongs to has committed (never if it rolls back).
+ * Outside such a transaction, fn runs straight away.
+ */
+export function afterCommit (tx: Queryable, fn: () => Promise<void>): void {
+    const hooks = afterCommitHooks.get(tx)
+    if (hooks) hooks.push(fn)
+    else void fn().catch((e: unknown) => console.error('[after-commit]', e))
 }
 
 /**

@@ -3,12 +3,12 @@ import { z } from 'zod'
 
 import { type EstateSettings, resolveEstateSettings } from '@/config/defaults'
 import { type Queryable, inOrder, withDbContext } from '@/db'
-import { chargeKind, estates, levyPayments, notifications, occupancies, paymentMethod, paymentReminders, units, users, zones } from '@/db/schema'
+import { chargeKind, estates, levyPayments, occupancies, paymentMethod, paymentReminders, units, users, zones } from '@/db/schema'
 import { type Actor, getEstateAccess, requireCapability } from '@/lib/access'
 import { recordAudit } from '@/lib/audit'
 import { AppError, ForbiddenError, NotFoundError } from '@/lib/errors'
 import { formatNaira, parseNairaToKobo } from '@/lib/format'
-import { type PendingSms, notifyUnitResidents, sendPendingSms } from '@/lib/notifications'
+import { type PendingSms, insertNotifications, notifyUnitResidents, sendPendingSms } from '@/lib/notifications'
 import {
     type Frequency, amountTowards, lagosMonth, monthDate, parseMonth, periodKeyFor, periodLabel, periodRange, rangeLabel, yearOf,
 } from '@/lib/periods'
@@ -471,7 +471,7 @@ export async function sendPaymentReminders (actor: Actor, estateId: string, inpu
             const body = `Your ${CHARGE_KIND_LABEL[data.kind].toLowerCase()} for ${label}${owed} for ${h.unitLabel}, ${h.zoneName} has not been recorded as paid.${data.message ? ` ${data.message}` : ''} If you have paid, send your receipt to the estate office.`
             const withAccounts = [...new Set(residents.map(r => r.userId).filter((u): u is string => u !== null))]
             if (withAccounts.length) {
-                await tx.insert(notifications).values(withAccounts.map(userId => ({ estateId, userId, type: 'payment.reminder', title, body, link: '/app' })))
+                await insertNotifications(tx, withAccounts.map(userId => ({ estateId, userId, type: 'payment.reminder', title, body, link: '/app' })))
             }
             const phones = [...new Set(residents.map(r => r.phone))]
             for (const to of phones) sms.push({ to, body: `${estateName}: ${body}` })
