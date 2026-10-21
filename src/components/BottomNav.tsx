@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
 import type { NavTargets } from '@/lib/estates'
 
@@ -63,37 +64,80 @@ function residentTabs (occupancyId: string, unread: number): Tab[] {
     ]
 }
 
-/** Picks the menu for the page being viewed, so someone with several roles gets the right tabs in each area. */
-function tabsFor (path: string, t: NavTargets, unread: number): Tab[] | null {
-    const id = (prefix: string) => (path.startsWith(prefix) ? path.slice(prefix.length).split('/')[0] : null)
-    const estateRoles = (estateId: string) => t.estates.find(e => e.id === estateId)?.roles ?? []
+/** Which dashboard a menu belongs to. Each of the four dashboards has its own menu. */
+type Dashboard =
+    | { kind: 'platform' }
+    | { kind: 'estate', estateId: string }
+    | { kind: 'security', estateId: string }
+    | { kind: 'resident', occupancyId: string }
 
-    if (path.startsWith('/platform') && t.isPlatformAdmin) return platformTabs(unread)
+const LAST_DASHBOARD_KEY = 'myestate:lastDashboard'
+
+/** The dashboard a page belongs to, or null for pages shared by everyone (/app, /notifications). */
+function dashboardForPath (path: string, t: NavTargets): Dashboard | null {
+    const id = (prefix: string) => (path.startsWith(prefix) ? path.slice(prefix.length).split('/')[0] : null)
+    if (path.startsWith('/platform')) return t.isPlatformAdmin ? { kind: 'platform' } : null
     const sec = id('/security/') ?? id('/gate/')
-    if (sec) return securityTabs(sec, unread)
+    if (sec) return { kind: 'security', estateId: sec }
     const est = id('/estate/')
     if (est) {
-        const roles = estateRoles(est)
-        return roles.length === 1 && roles[0] === 'guard' ? securityTabs(est, unread) : estateTabs(est, roles, unread)
+        // Guards only use the estate pages their security menu links to; keep them on that menu
+        const roles = t.estates.find(e => e.id === est)?.roles ?? []
+        return roles.length > 0 && roles.every(r => r === 'guard') ? { kind: 'security', estateId: est } : { kind: 'estate', estateId: est }
     }
     const home = id('/home/')
-    if (home) return residentTabs(home, unread)
-
-    // Anywhere else (e.g. /app): the person's main role
-    if (t.isPlatformAdmin) return platformTabs(unread)
-    const admin = t.estates.find(e => e.roles.some(r => r !== 'guard'))
-    if (admin) return estateTabs(admin.id, admin.roles, unread)
-    const guard = t.estates.find(e => e.roles.includes('guard'))
-    if (guard) return securityTabs(guard.id, unread)
-    if (t.homes[0]) return residentTabs(t.homes[0].occupancyId, unread)
-    return null
+    return home ? { kind: 'resident', occupancyId: home } : null
 }
 
-/** Fixed tab bar at the bottom of the screen on phones and tablets (hidden on desktop, which has the side menu). */
+/** Whether the person can still use a remembered dashboard (roles change, people move out). */
+function stillAllowed (d: Dashboard, t: NavTargets): boolean {
+    switch (d.kind) {
+        case 'platform': return t.isPlatformAdmin
+        case 'estate': return t.estates.some(e => e.id === d.estateId && e.roles.some(r => r !== 'guard'))
+        case 'security': return t.estates.some(e => e.id === d.estateId && e.roles.some(r => r === 'guard' || r === 'estate_admin'))
+        case 'resident': return t.homes.some(h => h.occupancyId === d.occupancyId)
+    }
+}
+
+/** The person's main dashboard, for shared pages when they haven't opened one yet. */
+function mainDashboard (t: NavTargets): Dashboard | null {
+    if (t.isPlatformAdmin) return { kind: 'platform' }
+    const admin = t.estates.find(e => e.roles.some(r => r !== 'guard'))
+    if (admin) return { kind: 'estate', estateId: admin.id }
+    const guard = t.estates.find(e => e.roles.includes('guard'))
+    if (guard) return { kind: 'security', estateId: guard.id }
+    return t.homes[0] ? { kind: 'resident', occupancyId: t.homes[0].occupancyId } : null
+}
+
+function tabsFor (d: Dashboard, t: NavTargets, unread: number): Tab[] {
+    switch (d.kind) {
+        case 'platform': return platformTabs(unread)
+        case 'estate': return estateTabs(d.estateId, t.estates.find(e => e.id === d.estateId)?.roles ?? [], unread)
+        case 'security': return securityTabs(d.estateId, unread)
+        case 'resident': return residentTabs(d.occupancyId, unread)
+    }
+}
+
 export function BottomNav ({ targets, unread }: { targets: NavTargets, unread: number }) {
     const path = usePathname()
-    const tabs = tabsFor(path, targets, unread)
-    if (!tabs) return null
+    const fromPath = dashboardForPath(path, targets)
+    const [remembered, setRemembered] = useState<Dashboard | null>(null)
+
+    // On a dashboard page, remember it; on shared pages (/app, Alerts), keep showing the last dashboard's menu
+    useEffect(() => {
+        try {
+            if (fromPath) {
+                sessionStorage.setItem(LAST_DASHBOARD_KEY, JSON.stringify(fromPath))
+                return
+            }
+            const saved = JSON.parse(sessionStorage.getItem(LAST_DASHBOARD_KEY) ?? 'null') as Dashboard | null
+            setRemembered(saved && stillAllowed(saved, targets) ? saved : null)
+        } catch { /* storage unavailable */ }
+    }, [path]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const dashboard = fromPath ?? remembered ?? mainDashboard(targets)
+    if (!dashboard) return null
+    const tabs = tabsFor(dashboard, targets, unread)
     const isActive = (t: Tab) => {
         const href = t.href.split('#')[0]
         if (t.href.includes('#') && href === path) return false // in-page shortcuts never take over their page's tab
