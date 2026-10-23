@@ -31,9 +31,28 @@ writeFileSync(manifestPath, manifest)
 const gradlePath = 'android/app/build.gradle'
 const code = Number(process.env.APP_VERSION_CODE ?? 1)
 const name = process.env.APP_VERSION_NAME ?? `1.0.${code}`
-const gradle = readFileSync(gradlePath, 'utf8')
+let gradle = readFileSync(gradlePath, 'utf8')
     .replace(/versionCode \d+/, `versionCode ${code}`)
     .replace(/versionName "[^"]*"/, `versionName "${name}"`)
+// Release builds (the Google Play AAB) are signed with the private upload key when UPLOAD_KEYSTORE_FILE,
+// UPLOAD_KEYSTORE_PASSWORD, UPLOAD_KEY_ALIAS and UPLOAD_KEY_PASSWORD are set; the key itself is never committed
+if (!gradle.includes('signingConfigs')) {
+    gradle = gradle
+        .replace('    buildTypes {', `    signingConfigs {
+        release {
+            if (System.getenv('UPLOAD_KEYSTORE_FILE')) {
+                storeFile file(System.getenv('UPLOAD_KEYSTORE_FILE'))
+                storePassword System.getenv('UPLOAD_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('UPLOAD_KEY_ALIAS')
+                keyPassword System.getenv('UPLOAD_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {`)
+        .replace(/(release \{\n\s+minifyEnabled false)/, `release {
+            if (System.getenv('UPLOAD_KEYSTORE_FILE')) signingConfig signingConfigs.release
+            minifyEnabled false`)
+}
 writeFileSync(gradlePath, gradle)
 
 console.log(`patched manifest (+${permissions.length} permissions) and set version ${name} (${code})`)

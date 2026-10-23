@@ -8,6 +8,7 @@ import { AppHeader } from '@/components/AppHeader'
 import { AutoRefresh } from '@/components/AutoRefresh'
 import { PhoneInput } from '@/components/PhoneInput'
 import { Badge, type BadgeTone, PageHeader, SectionCard, StatCard } from '@/components/ui'
+import { BRAND } from '@/config/brand'
 import { actorFromUser } from '@/lib/access'
 import { requireUser } from '@/lib/auth/current'
 import { DISTRESS_STATUS_LABEL, formatDialNumber, listPlatformAlerts, listPoliceStations } from '@/lib/emergency'
@@ -41,7 +42,7 @@ export default async function PlatformPage () {
             <AppHeader user={user} />
             <AutoRefresh seconds={30} />
             <main className='mx-auto max-w-7xl space-y-8 px-4 py-8'>
-                <PageHeader title='Super admin' description='Every estate on Teeco, SOS alerts across all of them, and the police directory.' />
+                <PageHeader title='Super admin' description={`Every estate on ${BRAND.productName}, SOS alerts across all of them, and the police directory.`} />
 
                 <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5'>
                     <StatCard label='Estates' value={estates.length} icon={Building2} />
