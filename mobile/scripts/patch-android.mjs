@@ -55,4 +55,20 @@ if (!gradle.includes('signingConfigs')) {
 }
 writeFileSync(gradlePath, gradle)
 
-console.log(`patched manifest (+${permissions.length} permissions) and set version ${name} (${code})`)
+// Push notifications need the Firebase project's google-services.json, given as GOOGLE_SERVICES_JSON (its contents)
+// or GOOGLE_SERVICES_JSON_FILE (a path). The web app only asks for push permission when the user agent says the
+// build supports it, since registering without Firebase crashes the app.
+const servicesJson = process.env.GOOGLE_SERVICES_JSON || (process.env.GOOGLE_SERVICES_JSON_FILE && readFileSync(process.env.GOOGLE_SERVICES_JSON_FILE, 'utf8'))
+if (servicesJson) {
+    const packageName = JSON.parse(readFileSync('capacitor.config.json', 'utf8')).appId
+    if (!JSON.parse(servicesJson).client?.some(c => c.client_info?.android_client_info?.package_name === packageName)) {
+        throw new Error(`google-services.json has no Android app for ${packageName}`)
+    }
+    writeFileSync('android/app/google-services.json', servicesJson)
+    const configPath = 'android/app/src/main/assets/capacitor.config.json'
+    const config = JSON.parse(readFileSync(configPath, 'utf8'))
+    if (!config.appendUserAgent.includes('MyEstateappPush')) config.appendUserAgent += ' MyEstateappPush'
+    writeFileSync(configPath, JSON.stringify(config, null, '\t'))
+}
+
+console.log(`patched manifest (+${permissions.length} permissions), set version ${name} (${code}), push ${servicesJson ? 'on' : 'off (no google-services.json)'}`)

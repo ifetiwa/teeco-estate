@@ -3,7 +3,7 @@ export const BRAND = {
     productName: 'MyEstateapp',
     legalName: 'Teeco Enterprise Limited',
     rcNumber: 'RC 8211994',
-    supportEmail: 'support@teeco.example',
+    supportEmail: 'teeco2010@gmail.com',
     colors: {
         primary: '#0f5132',
         primaryDark: '#0a3622',
