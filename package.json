@@ -18,7 +18,8 @@
     "test:watch": "vitest",
     "create-platform-admin": "tsx scripts/create-platform-admin.ts",
     "test:e2e": "playwright test",
-    "seed:demo": "tsx scripts/seed-demo.ts"
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "add-reviewer": "tsx scripts/add-reviewer.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",
